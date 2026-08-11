@@ -174,7 +174,7 @@ hr.s{border:0;border-top:1px solid var(--border);margin:14px 0}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <script type="text/babel">
 const {useState,useEffect,useMemo} = React;
-const VERSION = 'v9 ・ 2026-08-12';
+const VERSION = 'v10 ・ 2026-08-12';
 
 /* ---------- storage ---------- */
 let LS=null;
@@ -905,13 +905,15 @@ function cycleInfo(cyc,d){
   const sheetStart=shift(cyc.start,idx*len);
   const dayInSheet=gap(sheetStart,d)+1;
   const placeboStart=shift(sheetStart,len-pl);
+  /* 出血は偽薬2〜3日目にはじまることが多い */
   const windows=[-1,0,1,2].map(i=>{
     const ps=shift(placeboStart,i*len);
-    return {from:shift(ps,2),to:shift(ps,5)};
+    return {ps,from:shift(ps,1),to:shift(ps,2),end:shift(ps,5)};
   });
   return {len,pl,dayInSheet,sheetNo:idx+1,isPlacebo:dayInSheet>len-pl,
-    sheetStart,placeboStart,nextStart:shift(sheetStart,len),
-    next:windows.find(w=>w.to>=d)||windows[windows.length-1],
+    sheetStart,placeboStart,placeboEnd:shift(placeboStart,pl-1),
+    nextStart:shift(sheetStart,len),
+    next:windows.find(w=>w.end>=d)||windows[windows.length-1],
     after:windows.filter(w=>w.from>d).slice(0,2)};
 }
 
@@ -970,16 +972,19 @@ function Body({health,setHealth,day}){
         {ci.sheetNo}シート目 ／ {ci.isPlacebo?'いまは偽薬':`実薬（偽薬は ${nice(ci.placeboStart)} から）`}</div>
       <hr className="s"/>
       <div style={{display:'flex',fontSize:13,padding:'3px 0'}}>
-        <span style={{color:'var(--ink2)'}}>次の出血の見込み</span>
+        <span style={{color:'var(--ink2)'}}>出血がはじまる見込み</span>
         <span className="num" style={{marginLeft:'auto'}}>{nice(ci.next.from)}〜{nice(ci.next.to)}</span></div>
+      {ci.pl>0 && <div style={{display:'flex',fontSize:13,padding:'3px 0'}}>
+        <span style={{color:'var(--ink2)'}}>偽薬の期間</span>
+        <span className="num" style={{marginLeft:'auto'}}>{nice(ci.placeboStart)}〜{nice(ci.placeboEnd)}</span></div>}
       <div style={{display:'flex',fontSize:13,padding:'3px 0'}}>
         <span style={{color:'var(--ink2)'}}>次のシート開始</span>
         <span className="num" style={{marginLeft:'auto'}}>{nice(ci.nextStart)}</span></div>
       {ci.after.map(w=>(
         <div key={w.from} style={{display:'flex',fontSize:12.5,padding:'3px 0',color:'var(--muted)'}}>
-          <span>そのあと</span>
+          <span>そのあとの見込み</span>
           <span className="num" style={{marginLeft:'auto'}}>{nice(w.from)}〜{nice(w.to)}</span></div>))}
-      <p className="hint">偽薬に入って2日目から5日目を目安に出しています。実際とずれたら上の記録が本当です。</p>
+      <p className="hint">偽薬の2〜3日目にはじまる前提で出しています。実際とずれたら、上の記録のほうが本当です。</p>
       <button className="chip mini" style={{marginTop:10}} onClick={()=>setOpenCyc(!openCyc)}>
         {openCyc?'とじる':'シートの設定を変える'}</button>
     </div>}
