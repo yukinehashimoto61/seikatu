@@ -174,7 +174,7 @@ hr.s{border:0;border-top:1px solid var(--border);margin:14px 0}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <script type="text/babel">
 const {useState,useEffect,useMemo} = React;
-const VERSION = 'v8 ・ 2026-08-12';
+const VERSION = 'v9 ・ 2026-08-12';
 
 /* ---------- storage ---------- */
 let LS=null;
@@ -335,10 +335,10 @@ function App(){
     {tab==='home'&&<Home {...lib} status={status} setStatus={setStatus} onGear={()=>setGear(true)}
       logs={logs} setLogs={setLogs} nights={nights} setNights={setNights}
       pending={pending} setPending={setPending}/>}
-    {tab==='plan'&&<Plan {...lib}/>}
+    {tab==='plan'&&<Plan {...lib} day={status.date}/>}
     {tab==='reg'&&<Register {...lib}/>}
     {tab==='look'&&<Look logs={logs} setLogs={setLogs} nights={nights}/>}
-    {tab==='body'&&<Body health={health} setHealth={setHealth}/>}
+    {tab==='body'&&<Body health={health} setHealth={setHealth} day={status.date}/>}
     <nav>
       <button className={tab==='home'?'on':''} onClick={()=>setTab('home')}><span>◉</span>きょう</button>
       <button className={tab==='plan'?'on':''} onClick={()=>setTab('plan')}><span>▤</span>段取り</button>
@@ -574,8 +574,9 @@ function DiarySheet({date,init,onCancel,onSave,pickDate}){
 }
 
 /* ---------- PLAN ---------- */
-function Plan({chores,actions,tasks,events,plans,setPlans}){
-  const [date,setDate]=useState(shift(today(),1));
+function Plan({chores,actions,tasks,events,plans,setPlans,day}){
+  const base=day||today();
+  const [date,setDate]=useState(shift(base,1));
   const plan=normalize(plans[date]);
   const patch=fn=>setPlans(p=>{const np={...p};np[date]=normalize({...(np[date]||{})});fn(np[date]);return np;});
   const setWork=w=>setPlans(p=>({...p,[date]:{work:w,slots:{morning:[],mid:[],evening:[]},done:{},dropped:{},fixed:false}}));
@@ -631,7 +632,7 @@ function Plan({chores,actions,tasks,events,plans,setPlans}){
   return (<div className="screen">
     <Head title="段取り" date={date}/>
     <div className="chips" style={{marginBottom:14}}>
-      {[0,1,2].map(n=>{const s=shift(today(),n);return(
+      {[0,1,2].map(n=>{const s=shift(base,n);return(
         <button key={n} className={'chip'+(date===s?' on':'')} onClick={()=>setDate(s)}>
           {n===0?'今日':n===1?'明日':nice(s)}</button>);})}
     </div>
@@ -897,44 +898,105 @@ function Look({logs,setLogs,nights}){
 }
 
 /* ---------- BODY ---------- */
-function Body({health,setHealth}){
-  const d=today();
-  const h={pill:{},bleed:{},visits:[],sick:[],...health};
-  const upd=fn=>setHealth(prev=>{const n={pill:{},bleed:{},visits:[],sick:[],...prev};fn(n);return n;});
+function cycleInfo(cyc,d){
+  if(!cyc||!cyc.start) return null;
+  const len=Math.max(7,+cyc.length||28), pl=Math.max(0,+cyc.placebo||0);
+  const idx=Math.floor(gap(cyc.start,d)/len);
+  const sheetStart=shift(cyc.start,idx*len);
+  const dayInSheet=gap(sheetStart,d)+1;
+  const placeboStart=shift(sheetStart,len-pl);
+  const windows=[-1,0,1,2].map(i=>{
+    const ps=shift(placeboStart,i*len);
+    return {from:shift(ps,2),to:shift(ps,5)};
+  });
+  return {len,pl,dayInSheet,sheetNo:idx+1,isPlacebo:dayInSheet>len-pl,
+    sheetStart,placeboStart,nextStart:shift(sheetStart,len),
+    next:windows.find(w=>w.to>=d)||windows[windows.length-1],
+    after:windows.filter(w=>w.from>d).slice(0,2)};
+}
+
+function Body({health,setHealth,day}){
+  const d=day||today();
+  const h={pill:{},bleed:{},visits:[],sick:[],cycle:null,...health};
+  const upd=fn=>setHealth(prev=>{const n={pill:{},bleed:{},visits:[],sick:[],cycle:null,...prev};fn(n);return n;});
   const last14=[...Array(14)].map((_,i)=>shift(d,-13+i));
-  const streak=useMemo(()=>{let c=0,cur=d;while(h.pill[cur]){c++;cur=shift(cur,-1);}return c;},[h.pill,d]);
   const bleedDays=Object.keys(h.bleed).filter(k=>h.bleed[k]).sort();
   const lastBleed=bleedDays.length?bleedDays[bleedDays.length-1]:null;
+  const [rec,setRec]=useState(d);
+  const streak=useMemo(()=>{let c=0,cur=d;while(h.pill[cur]){c++;cur=shift(cur,-1);}return c;},[h.pill,d]);
+  const ci=cycleInfo(h.cycle,d);
+  const [cStart,setCStart]=useState(h.cycle?h.cycle.start:d);
+  const [cLen,setCLen]=useState(h.cycle?h.cycle.length:28);
+  const [cPl,setCPl]=useState(h.cycle?h.cycle.placebo:4);
+  const [openCyc,setOpenCyc]=useState(false);
   const [vDate,setVDate]=useState(d),[vPlace,setVPlace]=useState(''),[vNote,setVNote]=useState('');
   const [sDate,setSDate]=useState(d),[sWhat,setSWhat]=useState(''),[sCare,setSCare]=useState('');
 
   return (<div className="screen">
     <Head title="からだ" date={d}/>
-    <p className="eyebrow">きょう</p>
+    <p className="eyebrow">記録する日</p>
     <div className="card">
+      <input type="date" value={rec} onChange={e=>setRec(e.target.value)}/>
+      {rec!==d && <p className="hint">{nice(d)} 以外の日に記録しています。</p>}
+      <hr className="s"/>
       <div style={{display:'flex',alignItems:'center',gap:10}}>
         <div style={{flex:1}}>
           <div style={{fontWeight:700}}>ピル</div>
-          <div style={{fontSize:11.5,color:'var(--muted)'}}>{streak>0?`${streak}日つづけて記録中`:'今日はまだ'}</div>
+          <div style={{fontSize:11.5,color:'var(--muted)'}}>{streak>0?`${streak}日つづけて記録中`:'まだ'}</div>
         </div>
-        <button className={'chip'+(h.pill[d]?' on':'')} onClick={()=>upd(n=>{n.pill={...n.pill,[d]:!n.pill[d]}})}>
-          {h.pill[d]?'飲んだ':'飲んだら押す'}</button>
+        <button className={'chip'+(h.pill[rec]?' on':'')} onClick={()=>upd(n=>{n.pill={...n.pill,[rec]:!n.pill[rec]}})}>
+          {h.pill[rec]?'飲んだ':'飲んだら押す'}</button>
       </div>
       <div className="dots">{last14.map(x=>(
         <i key={x} className={h.pill[x]?'y':''}>{new Date(x+'T00:00:00').getDate()}</i>))}</div>
       <hr className="s"/>
       <div style={{display:'flex',alignItems:'center',gap:10}}>
         <div style={{flex:1}}>
-          <div style={{fontWeight:700}}>消退出血</div>
+          <div style={{fontWeight:700}}>出血</div>
           <div style={{fontSize:11.5,color:'var(--muted)'}}>
             {lastBleed?`最後の記録 ${nice(lastBleed)}（${bleedDays.length}日ぶん）`:'記録なし'}</div>
         </div>
-        <button className={'chip'+(h.bleed[d]?' on':'')} onClick={()=>upd(n=>{n.bleed={...n.bleed,[d]:!n.bleed[d]}})}>
-          {h.bleed[d]?'あった':'あったら押す'}</button>
+        <button className={'chip'+(h.bleed[rec]?' on':'')} onClick={()=>upd(n=>{n.bleed={...n.bleed,[rec]:!n.bleed[rec]}})}>
+          {h.bleed[rec]?'あった':'あったら押す'}</button>
       </div>
       <div className="dots">{last14.map(x=>(
         <i key={x} className={h.bleed[x]?'b':''}>{new Date(x+'T00:00:00').getDate()}</i>))}</div>
     </div>
+
+    <p className="eyebrow mt">シートと出血の見込み</p>
+    {ci && <div className="card">
+      <div className="big num">{ci.dayInSheet}<small>日目</small></div>
+      <div style={{fontSize:12,color:'var(--muted)',marginTop:-4}}>
+        {ci.sheetNo}シート目 ／ {ci.isPlacebo?'いまは偽薬':`実薬（偽薬は ${nice(ci.placeboStart)} から）`}</div>
+      <hr className="s"/>
+      <div style={{display:'flex',fontSize:13,padding:'3px 0'}}>
+        <span style={{color:'var(--ink2)'}}>次の出血の見込み</span>
+        <span className="num" style={{marginLeft:'auto'}}>{nice(ci.next.from)}〜{nice(ci.next.to)}</span></div>
+      <div style={{display:'flex',fontSize:13,padding:'3px 0'}}>
+        <span style={{color:'var(--ink2)'}}>次のシート開始</span>
+        <span className="num" style={{marginLeft:'auto'}}>{nice(ci.nextStart)}</span></div>
+      {ci.after.map(w=>(
+        <div key={w.from} style={{display:'flex',fontSize:12.5,padding:'3px 0',color:'var(--muted)'}}>
+          <span>そのあと</span>
+          <span className="num" style={{marginLeft:'auto'}}>{nice(w.from)}〜{nice(w.to)}</span></div>))}
+      <p className="hint">偽薬に入って2日目から5日目を目安に出しています。実際とずれたら上の記録が本当です。</p>
+      <button className="chip mini" style={{marginTop:10}} onClick={()=>setOpenCyc(!openCyc)}>
+        {openCyc?'とじる':'シートの設定を変える'}</button>
+    </div>}
+    {(!ci||openCyc) && <div className="card">
+      <label className="f">いま飲んでいるシートを飲みはじめた日</label>
+      <input type="date" value={cStart} onChange={e=>setCStart(e.target.value)}/>
+      <label className="f">1シートの日数</label>
+      <div className="chips">{[28,21].map(n=>(
+        <button key={n} className={'chip'+(cLen===n?' on':'')} onClick={()=>setCLen(n)}>{n}日</button>))}</div>
+      <label className="f">そのうち偽薬（休薬）</label>
+      <div className="chips">{[4,7,0].map(n=>(
+        <button key={n} className={'chip'+(cPl===n?' on':'')} onClick={()=>setCPl(n)}>{n===0?'なし':`${n}日`}</button>))}</div>
+      <button className="btn sm" disabled={!cStart} onClick={()=>{
+        upd(n=>{n.cycle={start:cStart,length:cLen,placebo:cPl}}); setOpenCyc(false);}}>
+        {ci?'この設定に変える':'この周期で計算する'}</button>
+      <p className="hint">シートを飲み終えて次を始めた日に、ここを更新すればずれません。</p>
+    </div>}
 
     <p className="eyebrow mt">通院</p>
     <div className="card">
