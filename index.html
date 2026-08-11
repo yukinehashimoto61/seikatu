@@ -61,8 +61,8 @@ body{background:var(--paper);color:var(--ink);
 .stn .go{margin-left:auto;border:0;background:var(--accent);color:#fff;font:inherit;font-weight:700;font-size:13px;
   letter-spacing:.1em;padding:8px 16px;border-radius:999px;cursor:pointer;box-shadow:0 2px 8px rgba(117,144,194,.35)}
 .rest .stn .go{background:var(--rose-deep);box-shadow:0 2px 8px rgba(194,128,126,.3)}
-.stn .go.ghost,.rest .stn .go.ghost{background:transparent;border:1px solid var(--border);
-  color:var(--muted);font-weight:500;box-shadow:none}
+.stn .go.ghost,.rest .stn .go.ghost{background:#fff;border:1.5px solid var(--serenity);
+  color:var(--deep);font-weight:700;box-shadow:none}
 @media (prefers-reduced-motion:reduce){.stn.now .dot i{animation:none}}
 
 .notice{background:#FBF1EF;border:1px solid #EFD7D3;color:#8E5B57;border-radius:12px;
@@ -172,7 +172,7 @@ hr.s{border:0;border-top:1px solid var(--border);margin:14px 0}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <script type="text/babel">
 const {useState,useEffect,useMemo} = React;
-const VERSION = 'v5 ・ 2026-08-12';
+const VERSION = 'v6 ・ 2026-08-12';
 
 /* ---------- storage ---------- */
 let LS=null;
@@ -373,26 +373,17 @@ function Backup({counts,onClose}){
 function Home({chores,setChores,actions,tasks,setTasks,events,plans,setPlans,status,setStatus,
                logs,setLogs,nights,setNights,pending,setPending,onGear}){
   const real=today();
-  const yest=shift(real,-1);
-  const beforeDawn=new Date().getHours()<4;
-  /* 夜中は前の日の続き。前日に「おきた」を押していなくても、前日ぶんを終われるようにする */
-  let d=real, phase='idle';
-  if(status.date===real && status.phase!=='idle'){ phase=status.phase; }
-  else if(['up','office','off'].includes(status.phase) && gap(status.date,real)<2){ d=status.date; phase=status.phase; }
-  else if(beforeDawn && plans[yest]){ d=yest; phase=(status.date===yest?status.phase:'idle'); }
-  const carryOver = d!==real;
+  /* 「ねる」→「おきた」を押すまで日は進まない。カレンダーの日付が変わっても切り替えない */
+  const d=status.date;
+  const phase=status.phase;
+  const carryOver=d!==real;
   const plan=normalize(plans[d]);
   const [carry,setCarry]=useState(null);
   const [bed,setBed]=useState(false);
 
-  if(!plan) return (<div className="screen">
-    <Head title="きょう" date={real} onGear={onGear}/>
-    <div className="card"><div className="empty">
-      <b>今日の段取りがまだありません</b>「段取り」タブで、今日やることを時間帯に振り分けてください。
-    </div></div>
-  </div>);
-
-  const stations = plan.work
+  const stations = !plan
+    ? [{k:'up',n:'おきた',slot:null},{k:'sleep',n:'ねる',slot:null}]
+    : plan.work
     ? [{k:'up',n:'おきた',slot:'morning'},{k:'office',n:'職場きた',slot:'mid'},
        {k:'off',n:'しごおわ',slot:'evening'},{k:'sleep',n:'ねる',slot:null}]
     : [{k:'up',n:'おきた',slot:'*'},{k:'sleep',n:'ねる',slot:null}];
@@ -401,7 +392,7 @@ function Home({chores,setChores,actions,tasks,setTasks,events,plans,setPlans,sta
   const cur=stations.find(s=>s.k===phase);
 
   const patch=fn=>setPlans(p=>{const np={...p};np[d]=normalize({...np[d]});fn(np[d]);return np;});
-  const left=slot=>(plan.slots[slot]||[]).filter(k=>!plan.done[k]&&!plan.dropped[k]);
+  const left=slot=>((plan&&plan.slots[slot])||[]).filter(k=>!plan.done[k]&&!plan.dropped[k]);
 
   const wake=()=>{
     if(pending){
@@ -420,11 +411,12 @@ function Home({chores,setChores,actions,tasks,setTasks,events,plans,setPlans,sta
     if(rest.length&&cur.slot!=='evening'){ setCarry({from:cur.slot,keys:rest,next:k}); return; }
     setStatus({date:d,phase:k});
   };
-  const sleepNow=(diary,cond)=>{
+  const sleepNow=(diary,cond,logDate)=>{
     const now=new Date().toISOString();
+    const key=logDate||d;
     setPending(now);
-    setLogs(l=>({...l,[d]:{...(l[d]||{}),diary,cond,bedAt:now}}));
-    setStatus({date:d,phase:'sleep'});
+    setLogs(l=>({...l,[key]:{...(l[key]||{}),diary,cond,bedAt:now}}));
+    setStatus({date:key,phase:'sleep'});
     setBed(false);
   };
   const check=key=>{
@@ -437,15 +429,16 @@ function Home({chores,setChores,actions,tasks,setTasks,events,plans,setPlans,sta
     }else if(type==='task') setTasks(ts=>ts.map(t=>t.id===id?{...t,done:false}:t));
   };
 
-  const showSlots = phase==='idle'||phase==='sleep' ? [] : plan.work ? [cur.slot] : SLOTKEYS;
+  const showSlots = !plan||phase==='idle'||phase==='sleep' ? [] : plan.work ? [cur.slot] : SLOTKEYS;
   const dayEvents=events.filter(e=>e.date===d);
 
   return (<div className="screen">
     <Head title="きょう" date={d} onGear={onGear}/>
     {carryOver && <div className="notice">
-      日付は変わりましたが、まだ {nice(d)} ぶんとして扱っています。「ねる」を押すと今日ぶんに切り替わります。</div>}
+      いま画面に出ているのは {nice(d)} ぶんです。日付は {nice(real)} に変わっていますが、
+      「ねる」を押すまで進めません。</div>}
 
-    <div className={'rail'+(plan.work?'':' rest')}>
+    <div className={'rail'+(plan&&!plan.work?' rest':'')}>
       {stations.map(s=>{
         const pos=keys.indexOf(s.k);
         const st = pos<idx?'past':(s.k===phase?'now':'');
@@ -471,8 +464,11 @@ function Home({chores,setChores,actions,tasks,setTasks,events,plans,setPlans,sta
       </div></div>))}</div>
     </>}
 
-    {phase==='idle' && <div className="card"><div className="empty">
-      <b>「おきた」を押すと始まります</b>押すまで、今日やることは表示しません。
+    {!plan && <div className="card"><div className="empty">
+      <b>{nice(d)} の段取りはありません</b>「段取り」タブで組めます。組まなくても、上のボタンで一日を進められます。
+    </div></div>}
+    {plan && phase==='idle' && <div className="card"><div className="empty">
+      <b>「おきた」を押すと始まります</b>押すまで、やることは表示しません。
     </div></div>}
     {phase==='sleep' && <div className="card"><div className="empty">
       <b>おつかれさま</b>{pending?`${clock(pending)} に一日を終えました。`:''}
@@ -496,7 +492,7 @@ function Home({chores,setChores,actions,tasks,setTasks,events,plans,setPlans,sta
       </div>
     </div>))}
 
-    {carry && <CarrySheet carry={carry} chores={chores} actions={actions} tasks={tasks} work={plan.work}
+    {carry && <CarrySheet carry={carry} chores={chores} actions={actions} tasks={tasks} work={!!(plan&&plan.work)}
       onDone={(toEve,toDrop)=>{
         patch(p=>{
           const slots={...p.slots};
@@ -507,7 +503,7 @@ function Home({chores,setChores,actions,tasks,setTasks,events,plans,setPlans,sta
         });
         setStatus({date:d,phase:carry.next}); setCarry(null);
       }}/>}
-    {bed && <DiarySheet date={d} init={logs[d]} onCancel={()=>setBed(false)} onSave={sleepNow}/>}
+    {bed && <DiarySheet date={d} init={logs[d]} pickDate onCancel={()=>setBed(false)} onSave={sleepNow}/>}
   </div>);
 }
 
@@ -537,18 +533,24 @@ function CarrySheet({carry,chores,actions,tasks,work,onDone}){
   </div></div>);
 }
 
-function DiarySheet({date,init,onCancel,onSave}){
+function DiarySheet({date,init,onCancel,onSave,pickDate}){
   const [diary,setDiary]=useState(init&&init.diary?init.diary:'');
   const [cond,setCond]=useState(init&&init.cond?init.cond:null);
+  const [dt,setDt]=useState(date);
   return (<div className="mask"><div className="sheet">
-    <h2>{nice(date)} の一言</h2>
+    <h2>{nice(dt)} の一言</h2>
     <p className="lead">一行でいいです。あとで読み返せます。</p>
+    {pickDate&&<>
+      <label className="f">何日ぶんとして残す？</label>
+      <input type="date" value={dt} onChange={e=>setDt(e.target.value)}/>
+      <p className="hint">日付をまたいで寝るときは、前の日のままでかまいません。</p>
+    </>}
     <label className="f">今日の体調</label>
     <div className="chips">{COND.map(c=>(
       <button key={c.v} className={'chip'+(cond===c.v?' on':'')} onClick={()=>setCond(c.v)}>{c.m} {c.t}</button>))}</div>
     <label className="f">一言日記</label>
     <textarea value={diary} onChange={e=>setDiary(e.target.value)} placeholder="今日どうだった？"/>
-    <button className="btn" onClick={()=>onSave(diary,cond)}>書いて、ねる</button>
+    <button className="btn" onClick={()=>onSave(diary,cond,dt)}>{pickDate?'書いて、ねる':'保存する'}</button>
     <button className="btn sm ghost" onClick={onCancel}>やめる</button>
   </div></div>);
 }
