@@ -35,6 +35,8 @@ body{background:var(--paper);color:var(--ink);
 .hd h1{font-size:18px;font-weight:700;letter-spacing:.12em;margin:0}
 .hd .date{margin-left:auto;font-size:13px;color:var(--muted);letter-spacing:.06em}
 .hd .gear{border:0;background:transparent;color:var(--muted);font-size:17px;cursor:pointer;padding:2px 0 2px 6px}
+.hd button.tapdate{border:0;background:transparent;color:var(--deep);font:inherit;font-size:13px;
+  letter-spacing:.06em;cursor:pointer;padding:2px 0;text-decoration:underline dotted;text-underline-offset:4px}
 .eyebrow{font-size:11px;letter-spacing:.22em;color:var(--muted);font-weight:500;margin:0 0 8px}
 .eyebrow.mt{margin-top:20px}
 
@@ -172,7 +174,7 @@ hr.s{border:0;border-top:1px solid var(--border);margin:14px 0}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <script type="text/babel">
 const {useState,useEffect,useMemo} = React;
-const VERSION = 'v6 ・ 2026-08-12';
+const VERSION = 'v7 ・ 2026-08-12';
 
 /* ---------- storage ---------- */
 let LS=null;
@@ -354,6 +356,9 @@ function Backup({counts,onClose}){
         <span>いま動いているアプリ</span><span className="num" style={{marginLeft:'auto'}}>{VERSION}</span>
       </div>
     </div>
+    <button className="btn" onClick={()=>location.replace(location.pathname+'?v='+Date.now())}>
+      最新に更新する</button>
+    <p className="hint">GitHubのファイルを差し替えたのに変わらないときに押してください。データは消えません。</p>
     <button className="btn" onClick={exportAll}>ぜんぶ書き出す</button>
     <label className="file">
       ファイルから読み込む
@@ -380,6 +385,7 @@ function Home({chores,setChores,actions,tasks,setTasks,events,plans,setPlans,sta
   const plan=normalize(plans[d]);
   const [carry,setCarry]=useState(null);
   const [bed,setBed]=useState(false);
+  const [pickDay,setPickDay]=useState(false);
 
   const stations = !plan
     ? [{k:'up',n:'おきた',slot:null},{k:'sleep',n:'ねる',slot:null}]
@@ -433,7 +439,7 @@ function Home({chores,setChores,actions,tasks,setTasks,events,plans,setPlans,sta
   const dayEvents=events.filter(e=>e.date===d);
 
   return (<div className="screen">
-    <Head title="きょう" date={d} onGear={onGear}/>
+    <Head title="きょう" date={d} onGear={onGear} onDate={()=>setPickDay(true)}/>
     {carryOver && <div className="notice">
       いま画面に出ているのは {nice(d)} ぶんです。日付は {nice(real)} に変わっていますが、
       「ねる」を押すまで進めません。</div>}
@@ -504,6 +510,8 @@ function Home({chores,setChores,actions,tasks,setTasks,events,plans,setPlans,sta
         setStatus({date:d,phase:carry.next}); setCarry(null);
       }}/>}
     {bed && <DiarySheet date={d} init={logs[d]} pickDate onCancel={()=>setBed(false)} onSave={sleepNow}/>}
+    {pickDay && <DaySheet date={d} onCancel={()=>setPickDay(false)}
+      onSave={dt=>{setStatus({date:dt,phase:status.phase});setPickDay(false);}}/>}
   </div>);
 }
 
@@ -963,12 +971,25 @@ function List({items,render,onDel}){
       </div>);})}
   </div>);
 }
-function Head({title,date,onGear}){
+function Head({title,date,onGear,onDate}){
   return (<div className="hd">
     <h1>{title}</h1>
-    {date&&<span className="date num">{nice(date)}</span>}
+    {date&&(onDate
+      ? <button className="date num tapdate" onClick={onDate}>{nice(date)}</button>
+      : <span className="date num">{nice(date)}</span>)}
     {onGear&&<button className="gear" onClick={onGear} aria-label="データの持ち出し">⚙</button>}
   </div>);
+}
+
+function DaySheet({date,onCancel,onSave}){
+  const [dt,setDt]=useState(date);
+  return (<div className="mask"><div className="sheet">
+    <h2>いまは何日ぶん？</h2>
+    <p className="lead">日付が変わったあとに使いはじめたときなど、ずれていたらここで直せます。</p>
+    <input type="date" value={dt} onChange={e=>setDt(e.target.value)}/>
+    <button className="btn" onClick={()=>onSave(dt)}>この日ぶんにする</button>
+    <button className="btn sm ghost" onClick={onCancel}>やめる</button>
+  </div></div>);
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
