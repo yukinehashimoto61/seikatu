@@ -61,6 +61,8 @@ body{background:var(--paper);color:var(--ink);
 .stn .go{margin-left:auto;border:0;background:var(--accent);color:#fff;font:inherit;font-weight:700;font-size:13px;
   letter-spacing:.1em;padding:8px 16px;border-radius:999px;cursor:pointer;box-shadow:0 2px 8px rgba(117,144,194,.35)}
 .rest .stn .go{background:var(--rose-deep);box-shadow:0 2px 8px rgba(194,128,126,.3)}
+.stn .go.ghost,.rest .stn .go.ghost{background:transparent;border:1px solid var(--border);
+  color:var(--muted);font-weight:500;box-shadow:none}
 @media (prefers-reduced-motion:reduce){.stn.now .dot i{animation:none}}
 
 .notice{background:#FBF1EF;border:1px solid #EFD7D3;color:#8E5B57;border-radius:12px;
@@ -170,7 +172,7 @@ hr.s{border:0;border-top:1px solid var(--border);margin:14px 0}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <script type="text/babel">
 const {useState,useEffect,useMemo} = React;
-const VERSION = 'v4 ・ 2026-08-12';
+const VERSION = 'v5 ・ 2026-08-12';
 
 /* ---------- storage ---------- */
 let LS=null;
@@ -371,10 +373,14 @@ function Backup({counts,onClose}){
 function Home({chores,setChores,actions,tasks,setTasks,events,plans,setPlans,status,setStatus,
                logs,setLogs,nights,setNights,pending,setPending,onGear}){
   const real=today();
-  /* 日付をまたいでも「ねる」を押すまでは前日の続き扱い（2日以上放置したら今日へ） */
-  const carryOver = status.date!==real && ['up','office','off'].includes(status.phase) && gap(status.date,real)<2;
-  const d = carryOver ? status.date : real;
-  const phase = (status.date===real||carryOver) ? status.phase : 'idle';
+  const yest=shift(real,-1);
+  const beforeDawn=new Date().getHours()<4;
+  /* 夜中は前の日の続き。前日に「おきた」を押していなくても、前日ぶんを終われるようにする */
+  let d=real, phase='idle';
+  if(status.date===real && status.phase!=='idle'){ phase=status.phase; }
+  else if(['up','office','off'].includes(status.phase) && gap(status.date,real)<2){ d=status.date; phase=status.phase; }
+  else if(beforeDawn && plans[yest]){ d=yest; phase=(status.date===yest?status.phase:'idle'); }
+  const carryOver = d!==real;
   const plan=normalize(plans[d]);
   const [carry,setCarry]=useState(null);
   const [bed,setBed]=useState(false);
@@ -406,13 +412,13 @@ function Home({chores,setChores,actions,tasks,setTasks,events,plans,setPlans,sta
     }
     setStatus({date:real,phase:'up'});
   };
-  const advance=()=>{
-    const next=keys[idx+1];
-    if(phase==='idle'){ wake(); return; }
-    if(next==='sleep'){ setBed(true); return; }
-    const rest=cur&&cur.slot&&cur.slot!=='*'?left(cur.slot):[];
-    if(rest.length&&cur.slot!=='evening'){ setCarry({from:cur.slot,keys:rest,next}); return; }
-    setStatus({date:d,phase:next});
+  const goTo=k=>{
+    if(k==='up'){ wake(); return; }
+    if(k==='sleep'){ setBed(true); return; }
+    const isNext=keys[idx+1]===k;
+    const rest=isNext&&cur&&cur.slot&&cur.slot!=='*'?left(cur.slot):[];
+    if(rest.length&&cur.slot!=='evening'){ setCarry({from:cur.slot,keys:rest,next:k}); return; }
+    setStatus({date:d,phase:k});
   };
   const sleepNow=(diary,cond)=>{
     const now=new Date().toISOString();
@@ -437,7 +443,7 @@ function Home({chores,setChores,actions,tasks,setTasks,events,plans,setPlans,sta
   return (<div className="screen">
     <Head title="きょう" date={d} onGear={onGear}/>
     {carryOver && <div className="notice">
-      日付が変わりましたが、{nice(d)} の続きです。「ねる」を押すと今日ぶんが始まります。</div>}
+      日付は変わりましたが、まだ {nice(d)} ぶんとして扱っています。「ねる」を押すと今日ぶんに切り替わります。</div>}
 
     <div className={'rail'+(plan.work?'':' rest')}>
       {stations.map(s=>{
@@ -446,10 +452,16 @@ function Home({chores,setChores,actions,tasks,setTasks,events,plans,setPlans,sta
         return (<div key={s.k} className={'stn '+st}>
           <span className="dot"><i/></span>
           <span className="nm">{s.n}</span>
-          {keys[idx+1]===s.k && <button className="go" onClick={advance}>{s.n} →</button>}
+          {keys.indexOf(s.k)>idx && <button className={'go'+(keys[idx+1]===s.k?'':' ghost')}
+            onClick={()=>goTo(s.k)}>{s.n} →</button>}
           {st==='past' && <span className="tm">済</span>}
         </div>);
       })}
+      {phase==='sleep' && <div className="stn">
+        <span className="dot"><i/></span>
+        <span className="nm" style={{color:'var(--muted)'}}>つぎの朝</span>
+        <button className="go ghost" onClick={wake}>おきた →</button>
+      </div>}
     </div>
 
     {dayEvents.length>0 && <>
