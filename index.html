@@ -174,7 +174,7 @@ hr.s{border:0;border-top:1px solid var(--border);margin:14px 0}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <script type="text/babel">
 const {useState,useEffect,useMemo} = React;
-const VERSION = 'v10 ・ 2026-08-12';
+const VERSION = 'v11 ・ 2026-08-12';
 
 /* ---------- storage ---------- */
 let LS=null;
@@ -906,15 +906,17 @@ function cycleInfo(cyc,d){
   const dayInSheet=gap(sheetStart,d)+1;
   const placeboStart=shift(sheetStart,len-pl);
   /* 出血は偽薬2〜3日目にはじまることが多い */
-  const windows=[-1,0,1,2].map(i=>{
+  const windows=[-1,0,1,2,3].map(i=>{
     const ps=shift(placeboStart,i*len);
-    return {ps,from:shift(ps,1),to:shift(ps,2),end:shift(ps,5)};
+    return {ps,from:shift(ps,1),to:shift(ps,2)};
   });
+  /* 見込みの終わりが今日より前のものは、もう過ぎた予測なので出さない */
+  let ni=windows.findIndex(w=>w.to>=d);
+  if(ni<0) ni=windows.length-1;
   return {len,pl,dayInSheet,sheetNo:idx+1,isPlacebo:dayInSheet>len-pl,
     sheetStart,placeboStart,placeboEnd:shift(placeboStart,pl-1),
     nextStart:shift(sheetStart,len),
-    next:windows.find(w=>w.end>=d)||windows[windows.length-1],
-    after:windows.filter(w=>w.from>d).slice(0,2)};
+    next:windows[ni],after:windows.slice(ni+1,ni+3)};
 }
 
 function Body({health,setHealth,day}){
