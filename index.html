@@ -174,7 +174,7 @@ hr.s{border:0;border-top:1px solid var(--border);margin:14px 0}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <script type="text/babel">
 const {useState,useEffect,useMemo} = React;
-const VERSION = 'v7 ・ 2026-08-12';
+const VERSION = 'v8 ・ 2026-08-12';
 
 /* ---------- storage ---------- */
 let LS=null;
@@ -190,7 +190,7 @@ function useStored(key,init){
   return [v,setV];
 }
 const DATA_KEYS=['lm_chores','lm_actions','lm_tasks','lm_events','lm_plans','lm_status',
-                 'lm_logs','lm_nights','lm_pendingBed','lm_health'];
+                 'lm_logs','lm_nights','lm_pendingBed','lm_health','lm_appver'];
 
 /* ---------- dates ---------- */
 const pad=n=>String(n).padStart(2,'0');
@@ -303,6 +303,16 @@ function importAll(file,done){
 }
 
 /* ---------- app ---------- */
+/* v6以前は0時に日付を勝手に進めていた。その書き込みを一度だけ取り消す */
+(function fixOldRollover(){
+  if(store.get('lm_appver',0)>=8){ return; }
+  const st=store.get('lm_status',null);
+  if(st&&st.phase==='idle'&&st.date===today()&&new Date().getHours()<5){
+    store.set('lm_status',{date:shift(today(),-1),phase:'idle'});
+  }
+  store.set('lm_appver',8);
+})();
+
 function App(){
   const [tab,setTab]=useState('home');
   const [gear,setGear]=useState(false);
