@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#91A8D0">
+<title>今日の運行</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="運行">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --serenity:#91A8D0; --accent:#7590C2; --deep:#4C6598; --soft:#DCE4F1;
+  --paper:#EFF2F8; --card:#FFFFFF; --border:#DFE5F0;
+  --ink:#2E3648; --ink2:#5B6580; --muted:#9AA3B8;
+  --rose:#F7CAC9; --rose-deep:#C2807E; --rose-soft:#F7E2E1;
+  --urgent:#C4736E; --amber:#B9924F;
+  --r:16px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{background:var(--paper);color:var(--ink);
+  font-family:"Zen Kaku Gothic New","Hiragino Sans",system-ui,sans-serif;font-size:15px;line-height:1.6}
+.num{font-family:ui-monospace,"SFMono-Regular",Menlo,monospace;font-variant-numeric:tabular-nums}
+#root{max-width:520px;margin:0 auto;min-height:100vh}
+.screen{padding:18px 16px 112px}
+
+.hd{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.hd h1{font-size:18px;font-weight:700;letter-spacing:.12em;margin:0}
+.hd .date{margin-left:auto;font-size:13px;color:var(--muted);letter-spacing:.06em}
+.hd .gear{border:0;background:transparent;color:var(--muted);font-size:17px;cursor:pointer;padding:2px 0 2px 6px}
+.eyebrow{font-size:11px;letter-spacing:.22em;color:var(--muted);font-weight:500;margin:0 0 8px}
+.eyebrow.mt{margin-top:20px}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:12px}
+.card.flat{padding:0;overflow:hidden}
+
+.rail{position:relative;padding-left:34px;margin:6px 0 22px}
+.rail:before{content:"";position:absolute;left:9px;top:10px;bottom:10px;width:2px;background:var(--soft);border-radius:2px}
+.rail.rest:before{background:var(--rose-soft)}
+.stn{position:relative;display:flex;align-items:center;gap:10px;min-height:46px}
+.stn .dot{position:absolute;left:-34px;top:50%;transform:translateY(-50%);width:20px;height:20px;border-radius:50%;
+  background:var(--paper);border:2px solid var(--soft);display:flex;align-items:center;justify-content:center}
+.stn .dot i{width:8px;height:8px;border-radius:50%;background:transparent;display:block}
+.stn.past .dot{border-color:var(--serenity)} .stn.past .dot i{background:var(--serenity)}
+.rest .stn.past .dot{border-color:var(--rose-deep)} .rest .stn.past .dot i{background:var(--rose-deep)}
+.stn.now .dot{border-color:var(--accent);box-shadow:0 0 0 6px rgba(145,168,208,.22)}
+.stn.now .dot i{background:var(--accent);animation:pulse 2.4s ease-in-out infinite}
+.rest .stn.now .dot{border-color:var(--rose-deep);box-shadow:0 0 0 6px rgba(247,202,201,.5)}
+.rest .stn.now .dot i{background:var(--rose-deep)}
+@keyframes pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(.6);opacity:.5}}
+.stn .nm{font-weight:700;letter-spacing:.14em;font-size:15px;color:var(--muted)}
+.stn.past .nm,.stn.now .nm{color:var(--ink)}
+.stn .tm{margin-left:auto;font-size:12px;color:var(--muted)}
+.stn .go{margin-left:auto;border:0;background:var(--accent);color:#fff;font:inherit;font-weight:700;font-size:13px;
+  letter-spacing:.1em;padding:8px 16px;border-radius:999px;cursor:pointer;box-shadow:0 2px 8px rgba(117,144,194,.35)}
+.rest .stn .go{background:var(--rose-deep);box-shadow:0 2px 8px rgba(194,128,126,.3)}
+@media (prefers-reduced-motion:reduce){.stn.now .dot i{animation:none}}
+
+.row{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border)}
+.row:last-child{border-bottom:0}
+.row .body{min-width:0;flex:1}
+.row .nm{font-weight:500;overflow-wrap:anywhere}
+.row .sub{font-size:11.5px;color:var(--muted);letter-spacing:.04em}
+.tick{flex:0 0 auto;border:1.5px solid var(--accent);color:var(--deep);background:transparent;font:inherit;
+  font-size:12.5px;font-weight:700;padding:6px 12px;border-radius:999px;cursor:pointer}
+.tick:active{background:var(--accent);color:#fff}
+.done .nm{color:var(--muted);text-decoration:line-through}
+.done .tick{border-color:var(--border);color:var(--muted)}
+
+.tag{display:inline-block;font-size:10.5px;letter-spacing:.1em;padding:2px 7px;border-radius:5px;
+  background:#EEF2F8;color:var(--ink2);margin-right:5px}
+.tag.chore{background:#E6EDF7;color:var(--deep)}
+.tag.action{background:#EAE8F4;color:#5E5788}
+.tag.task{background:#F7E9E8;color:#96605E}
+.tag.q1{background:#F6DDDB;color:var(--urgent)}
+.tag.q2{background:#DFE7F5;color:var(--deep)}
+.tag.q3{background:#F4EBDB;color:var(--amber)}
+.tag.q4{background:#EFF1F5;color:var(--muted)}
+
+label.f{display:block;font-size:12px;letter-spacing:.1em;color:var(--ink2);font-weight:500;margin:14px 0 6px}
+label.f:first-child{margin-top:0}
+input[type=text],input[type=date],input[type=time],input[type=number],select,textarea{
+  width:100%;font:inherit;font-size:15px;padding:10px 12px;border:1px solid var(--border);
+  border-radius:11px;background:#FAFBFE;color:var(--ink);appearance:none}
+textarea{min-height:84px;resize:vertical;line-height:1.7}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{font:inherit;font-size:13px;padding:7px 13px;border-radius:999px;border:1px solid var(--border);
+  background:#FAFBFE;color:var(--ink2);cursor:pointer}
+.chip.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+.chip.mini{font-size:11.5px;padding:5px 10px}
+.btn{width:100%;font:inherit;font-weight:700;letter-spacing:.1em;font-size:15px;padding:13px;border:0;
+  border-radius:13px;background:var(--deep);color:#fff;cursor:pointer;margin-top:18px}
+.btn.sm{margin-top:10px;padding:11px;font-size:14px}
+.btn.ghost{background:transparent;border:1px solid var(--border);color:var(--ink2);font-weight:500}
+.x{border:0;background:transparent;color:var(--muted);font-size:18px;cursor:pointer;padding:4px 6px;line-height:1}
+
+.empty{text-align:center;color:var(--muted);font-size:13.5px;padding:26px 10px}
+.empty b{display:block;color:var(--ink2);font-weight:700;margin-bottom:4px;font-size:14.5px}
+
+nav{position:fixed;bottom:0;left:0;right:0;background:rgba(255,255,255,.93);backdrop-filter:blur(10px);
+  border-top:1px solid var(--border);display:flex;padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;border:0;background:transparent;font:inherit;font-size:10px;letter-spacing:.06em;
+  font-weight:700;color:var(--muted);padding:11px 2px 13px;cursor:pointer}
+nav button.on{color:var(--deep)}
+nav button span{display:block;font-size:16px;margin-bottom:3px;line-height:1}
+
+.mask{position:fixed;inset:0;background:rgba(46,54,72,.45);display:flex;align-items:flex-end;justify-content:center;z-index:20}
+.sheet{background:var(--card);width:100%;max-width:520px;border-radius:20px 20px 0 0;
+  padding:20px 16px calc(20px + env(safe-area-inset-bottom));max-height:88vh;overflow:auto}
+.sheet h2{font-size:16px;margin:0 0 4px}
+.sheet p.lead{font-size:13px;color:var(--muted);margin:0 0 14px}
+.two{display:flex;gap:8px}
+.two button{flex:1;font:inherit;font-size:12.5px;font-weight:700;padding:8px;border-radius:10px;
+  border:1px solid var(--border);background:#FAFBFE;color:var(--ink2);cursor:pointer}
+.two button.k{border-color:var(--accent);color:var(--deep);background:#F2F6FC}
+hr.s{border:0;border-top:1px solid var(--border);margin:14px 0}
+.hint{font-size:12px;color:var(--muted);margin:6px 0 0}
+.slotbox{margin-bottom:12px}
+.slotttl{display:flex;align-items:center;gap:8px;font-size:12px;letter-spacing:.16em;font-weight:700;
+  color:var(--ink2);margin:0 0 6px}
+.slotttl em{font-style:normal;color:var(--muted);font-weight:400;letter-spacing:0}
+
+.sleep{display:flex;align-items:center;gap:9px;padding:7px 14px}
+.sleep .dy{font-size:11px;color:var(--muted);width:52px;flex:0 0 auto}
+.sleep .track{flex:1;height:8px;background:#EDF0F6;border-radius:4px;overflow:hidden}
+.sleep .fill{height:100%;background:var(--serenity);border-radius:4px}
+.sleep .fill.short{background:var(--rose-deep)}
+.sleep .hh{font-size:11.5px;width:64px;text-align:right;flex:0 0 auto;color:var(--ink2)}
+.big{font-size:30px;font-weight:700;letter-spacing:.02em;color:var(--deep)}
+.big small{font-size:14px;font-weight:500;color:var(--muted);margin-left:3px}
+
+.dots{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
+.dots i{width:19px;height:19px;border-radius:6px;background:#EDF0F6;display:flex;align-items:center;
+  justify-content:center;font-size:9px;font-style:normal;color:var(--muted)}
+.dots i.y{background:var(--serenity);color:#fff}
+.dots i.b{background:var(--rose);color:#8E5B59}
+.cond{display:inline-block;width:22px;height:22px;border-radius:50%;font-size:12px;line-height:22px;
+  text-align:center;font-weight:700;margin-right:8px;flex:0 0 auto}
+.c4{background:#DFE7F5;color:var(--deep)} .c3{background:#E4EDE6;color:#5B8168}
+.c2{background:#F4EBDB;color:var(--amber)} .c1{background:#F6DDDB;color:var(--urgent)}
+.diary{font-size:14px;line-height:1.75;white-space:pre-wrap;overflow-wrap:anywhere;margin:6px 0 0}
+.file{display:block;text-align:center;font-weight:700;letter-spacing:.1em;font-size:15px;padding:13px;
+  border-radius:13px;border:1px solid var(--border);background:#FAFBFE;color:var(--ink2);cursor:pointer;margin-top:10px}
+.file input{display:none}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script type="text/babel">
+const {useState,useEffect,useMemo} = React;
+
+/* ---------- storage ---------- */
+let LS=null;
+try{ localStorage.setItem('__t','1'); localStorage.removeItem('__t'); LS=localStorage; }catch(e){}
+const mem={};
+const store={
+  get(k,d){ try{ const v=LS?LS.getItem(k):mem[k]; return v==null?d:JSON.parse(v); }catch(e){ return d; } },
+  set(k,v){ const s=JSON.stringify(v); if(LS){ try{LS.setItem(k,s)}catch(e){mem[k]=s} } else mem[k]=s; }
+};
+function useStored(key,init){
+  const [v,setV]=useState(()=>store.get(key,init));
+  useEffect(()=>{store.set(key,v)},[v]);
+  return [v,setV];
+}
+const DATA_KEYS=['lm_chores','lm_actions','lm_tasks','lm_events','lm_plans','lm_status',
+                 'lm_logs','lm_nights','lm_pendingBed','lm_health'];
+
+/* ---------- dates ---------- */
+const pad=n=>String(n).padStart(2,'0');
+const dstr=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const today=()=>dstr(new Date());
+const shift=(s,n)=>{const d=new Date(s+'T00:00:00');d.setDate(d.getDate()+n);return dstr(d);};
+const WD=['日','月','火','水','木','金','土'];
+const wdOf=s=>new Date(s+'T00:00:00').getDay();
+const nice=s=>{const d=new Date(s+'T00:00:00');return `${d.getMonth()+1}/${d.getDate()}(${WD[d.getDay()]})`;};
+const gap=(a,b)=>Math.round((new Date(b+'T00:00:00')-new Date(a+'T00:00:00'))/86400000);
+const clock=iso=>{const d=new Date(iso);return `${pad(d.getHours())}:${pad(d.getMinutes())}`;};
+const hhmm=m=>`${Math.floor(m/60)}時間${pad(m%60)}分`;
+const uid=()=>Math.random().toString(36).slice(2,9);
+
+/* ---------- rules ---------- */
+function choreDue(c,date){
+  const iv=c.interval;
+  if(iv.type==='weekdays'){ if(!(iv.days||[]).includes(wdOf(date))) return false; return c.lastDone!==date; }
+  if(!c.lastDone) return true;
+  const need = iv.type==='daily'?1 : iv.type==='everyN'?Math.max(1,+iv.n||1) : iv.type==='weekly'?7 : 30;
+  return gap(c.lastDone,date)>=need;
+}
+function choreNote(c){
+  const iv=c.interval;
+  if(iv.type==='daily') return '毎日';
+  if(iv.type==='everyN') return `${iv.n}日に一回`;
+  if(iv.type==='weekly') return '週に一回';
+  if(iv.type==='monthly') return '月に一回';
+  return (iv.days||[]).map(d=>WD[d]).join('・')+'曜';
+}
+const QUAD={
+  q1:{n:'いますぐやる',s:'重要 × 緊急'}, q2:{n:'予定に入れる',s:'重要 × 緊急でない'},
+  q3:{n:'さっと片づける',s:'重要でない × 緊急'}, q4:{n:'いまはやらない',s:'重要でない × 緊急でない'}
+};
+const ORDER=['q1','q2','q3','q4'];
+const quadOf=(t,date)=>{
+  const urgent=t.deadline?gap(date,t.deadline)<=3:false;
+  return t.impact?(urgent?'q1':'q2'):(urgent?'q3':'q4');
+};
+const SLOTKEYS=['morning','mid','evening'];
+const slotName=(k,work)=>k==='morning'?'朝':k==='evening'?'夜':(work?'仕事中':'日中');
+const TAGS=['職場関連','人と会う','おひとりさまタイム'];
+const WHENS=['休日','仕事中','平日朝時間','退勤後'];
+const COND=[{v:4,m:'◎',t:'good'},{v:3,m:'○',t:'ふつう'},{v:2,m:'△',t:'いまいち'},{v:1,m:'×',t:'つらい'}];
+const TYPE_LABEL={chore:'家事',action:'行動',task:'タスク'};
+
+function resolve(key,{chores,actions,tasks}){
+  const [type,id]=key.split(':');
+  if(type==='chore'){const c=chores.find(x=>x.id===id);return c&&{type,id,name:c.name,note:choreNote(c)};}
+  if(type==='action'){const a=actions.find(x=>x.id===id);return a&&{type,id,name:a.name,note:'行動'};}
+  const t=tasks.find(x=>x.id===id);
+  return t&&{type,id,name:t.name,note:(t.kind==='work'?'仕事':'プライベート')+(t.deadline?` ／ 締切 ${nice(t.deadline)}`:'')};
+}
+function normalize(p){
+  if(!p) return p;
+  const s=p.slots||{};
+  return {...p,slots:{morning:s.morning||[],mid:s.mid||s.work||s.allday||[],evening:s.evening||[]}};
+}
+
+/* ---------- backup ---------- */
+function exportAll(){
+  const out={app:'seikatsu-kanri',version:3,exportedAt:new Date().toISOString(),data:{}};
+  DATA_KEYS.forEach(k=>{out.data[k]=store.get(k,null)});
+  const blob=new Blob([JSON.stringify(out,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download=`seikatsu-${today()}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
+}
+function importAll(file,done){
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const j=JSON.parse(r.result);
+      const d=(j&&j.data)||j;
+      let n=0;
+      DATA_KEYS.forEach(k=>{ if(d[k]!==undefined){ store.set(k,d[k]); n++; } });
+      if(!n) throw new Error('empty');
+      done(null,n);
+    }catch(e){ done('このファイルは読み込めませんでした。書き出したJSONを選んでください。'); }
+  };
+  r.onerror=()=>done('ファイルを開けませんでした。');
+  r.readAsText(file);
+}
+
+/* ---------- app ---------- */
+function App(){
+  const [tab,setTab]=useState('home');
+  const [gear,setGear]=useState(false);
+  const [chores,setChores]=useStored('lm_chores',[]);
+  const [actions,setActions]=useStored('lm_actions',[]);
+  const [tasks,setTasks]=useStored('lm_tasks',[]);
+  const [events,setEvents]=useStored('lm_events',[]);
+  const [plans,setPlans]=useStored('lm_plans',{});
+  const [status,setStatus]=useStored('lm_status',{date:today(),phase:'idle'});
+  const [logs,setLogs]=useStored('lm_logs',{});
+  const [nights,setNights]=useStored('lm_nights',[]);
+  const [pending,setPending]=useStored('lm_pendingBed',null);
+  const [health,setHealth]=useStored('lm_health',{pill:{},bleed:{},visits:[],sick:[]});
+
+  const d=today();
+  useEffect(()=>{ if(status.date!==d) setStatus({date:d,phase:'idle'}); },[d]);
+
+  const lib={chores,setChores,actions,setActions,tasks,setTasks,events,setEvents,plans,setPlans};
+  const counts={家事:chores.length,行動:actions.length,タスク:tasks.filter(t=>!t.done).length,
+    予定:events.length,日記:Object.keys(logs).length,睡眠:nights.length};
+
+  return (<>
+    {tab==='home'&&<Home {...lib} status={status} setStatus={setStatus} onGear={()=>setGear(true)}
+      logs={logs} setLogs={setLogs} nights={nights} setNights={setNights}
+      pending={pending} setPending={setPending}/>}
+    {tab==='plan'&&<Plan {...lib}/>}
+    {tab==='reg'&&<Register {...lib}/>}
+    {tab==='look'&&<Look logs={logs} setLogs={setLogs} nights={nights}/>}
+    {tab==='body'&&<Body health={health} setHealth={setHealth}/>}
+    <nav>
+      <button className={tab==='home'?'on':''} onClick={()=>setTab('home')}><span>◉</span>きょう</button>
+      <button className={tab==='plan'?'on':''} onClick={()=>setTab('plan')}><span>▤</span>段取り</button>
+      <button className={tab==='reg'?'on':''} onClick={()=>setTab('reg')}><span>＋</span>登録</button>
+      <button className={tab==='look'?'on':''} onClick={()=>setTab('look')}><span>✎</span>ふりかえり</button>
+      <button className={tab==='body'?'on':''} onClick={()=>setTab('body')}><span>✚</span>からだ</button>
+    </nav>
+    {gear && <Backup counts={counts} onClose={()=>setGear(false)}/>}
+  </>);
+}
+
+function Backup({counts,onClose}){
+  const [msg,setMsg]=useState(null);
+  return (<div className="mask"><div className="sheet">
+    <h2>データの持ち出し</h2>
+    <p className="lead">アプリを新しいものに差し替えるときは、先に書き出しておいてください。</p>
+    <div className="card" style={{marginBottom:0}}>
+      {Object.entries(counts).map(([k,v])=>(
+        <div key={k} style={{display:'flex',fontSize:13,padding:'3px 0'}}>
+          <span style={{color:'var(--ink2)'}}>{k}</span>
+          <span className="num" style={{marginLeft:'auto',color:'var(--muted)'}}>{v}件</span>
+        </div>))}
+    </div>
+    <button className="btn" onClick={exportAll}>ぜんぶ書き出す</button>
+    <label className="file">
+      ファイルから読み込む
+      <input type="file" accept="application/json,.json" onChange={e=>{
+        const f=e.target.files&&e.target.files[0]; if(!f) return;
+        if(!confirm('いまスマホに入っているデータは、読み込んだ内容で置き換わります。続けますか？')){e.target.value='';return;}
+        importAll(f,(err)=>{ if(err){setMsg(err);e.target.value='';} else location.reload(); });
+      }}/>
+    </label>
+    {msg&&<p className="hint" style={{color:'var(--urgent)'}}>{msg}</p>}
+    <p className="hint">書き出したファイルはスマホの「ファイル」アプリに保存されます。機種変更のときもこれを持っていけば戻せます。</p>
+    <button className="btn sm ghost" onClick={onClose}>とじる</button>
+  </div></div>);
+}
+
+/* ---------- HOME ---------- */
+function Home({chores,setChores,actions,tasks,setTasks,events,plans,setPlans,status,setStatus,
+               logs,setLogs,nights,setNights,pending,setPending,onGear}){
+  const d=today();
+  const plan=normalize(plans[d]);
+  const [carry,setCarry]=useState(null);
+  const [bed,setBed]=useState(false);
+
+  if(!plan) return (<div className="screen">
+    <Head title="きょう" date={d} onGear={onGear}/>
+    <div className="card"><div className="empty">
+      <b>今日の段取りがまだありません</b>「段取り」タブで、今日やることを時間帯に振り分けてください。
+    </div></div>
+  </div>);
+
+  const stations = plan.work
+    ? [{k:'up',n:'おきた',slot:'morning'},{k:'office',n:'職場きた',slot:'mid'},
+       {k:'off',n:'しごおわ',slot:'evening'},{k:'sleep',n:'ねる',slot:null}]
+    : [{k:'up',n:'おきた',slot:'*'},{k:'sleep',n:'ねる',slot:null}];
+  const keys=['idle',...stations.map(s=>s.k)];
+  const idx=keys.indexOf(status.phase);
+  const cur=stations.find(s=>s.k===status.phase);
+
+  const patch=fn=>setPlans(p=>{const np={...p};np[d]=normalize({...np[d]});fn(np[d]);return np;});
+  const left=slot=>(plan.slots[slot]||[]).filter(k=>!plan.done[k]&&!plan.dropped[k]);
+
+  const wake=()=>{
+    if(pending){
+      const wa=new Date().toISOString();
+      const min=Math.max(0,Math.round((new Date(wa)-new Date(pending))/60000));
+      setNights(ns=>[...ns.filter(x=>x.date!==d),{id:uid(),date:d,bedAt:pending,wakeAt:wa,min}]);
+      setPending(null);
+    }
+    setStatus({date:d,phase:'up'});
+  };
+  const advance=()=>{
+    const next=keys[idx+1];
+    if(next==='sleep'){ setBed(true); return; }
+    if(status.phase==='idle'){ wake(); return; }
+    const rest=cur&&cur.slot&&cur.slot!=='*'?left(cur.slot):[];
+    if(rest.length&&cur.slot!=='evening'){ setCarry({from:cur.slot,keys:rest,next}); return; }
+    setStatus({date:d,phase:next});
+  };
+  const sleepNow=(diary,cond)=>{
+    const now=new Date().toISOString();
+    setPending(now);
+    setLogs(l=>({...l,[d]:{diary,cond,bedAt:now}}));
+    setStatus({date:d,phase:'sleep'});
+    setBed(false);
+  };
+  const check=key=>{
+    const was=plan.done[key];
+    patch(p=>{p.done={...p.done,[key]:!was}});
+    const [type,id]=key.split(':');
+    if(!was){
+      if(type==='chore') setChores(cs=>cs.map(c=>c.id===id?{...c,lastDone:d}:c));
+      if(type==='task') setTasks(ts=>ts.map(t=>t.id===id?{...t,done:true}:t));
+    }else if(type==='task') setTasks(ts=>ts.map(t=>t.id===id?{...t,done:false}:t));
+  };
+
+  const showSlots = status.phase==='idle'||status.phase==='sleep' ? []
+    : plan.work ? [cur.slot] : SLOTKEYS;
+  const todayEvents=events.filter(e=>e.date===d);
+
+  return (<div className="screen">
+    <Head title="きょう" date={d} onGear={onGear}/>
+
+    <div className={'rail'+(plan.work?'':' rest')}>
+      {stations.map(s=>{
+        const pos=keys.indexOf(s.k);
+        const st = pos<idx?'past':(s.k===status.phase?'now':'');
+        return (<div key={s.k} className={'stn '+st}>
+          <span className="dot"><i/></span>
+          <span className="nm">{s.n}</span>
+          {keys[idx+1]===s.k && <button className="go" onClick={advance}>{s.n} →</button>}
+          {st==='past' && <span className="tm">済</span>}
+        </div>);
+      })}
+    </div>
+
+    {todayEvents.length>0 && <>
+      <p className="eyebrow">きょうの予定（メモ）</p>
+      <div className="card flat">{todayEvents.map(e=>(<div className="row" key={e.id}><div className="body">
+        <div className="nm">{e.title}</div>
+        <div className="sub">{e.timeMode==='time'?e.time:'終日'} ／ {e.tag} ／ {e.when}</div>
+      </div></div>))}</div>
+    </>}
+
+    {status.phase==='idle' && <div className="card"><div className="empty">
+      <b>「おきた」を押すと始まります</b>押すまで、今日やることは表示しません。
+    </div></div>}
+    {status.phase==='sleep' && <div className="card"><div className="empty">
+      <b>おつかれさま</b>{pending?`${clock(pending)} に一日を終えました。`:''}
+    </div></div>}
+
+    {showSlots.map(s=>(<div key={s}>
+      <p className="eyebrow mt">{slotName(s,plan.work)}にやると決めたこと</p>
+      <div className="card flat">
+        {(plan.slots[s]||[]).length===0 && <div className="empty"><b>この時間帯は空です</b>ゆっくりどうぞ。</div>}
+        {(plan.slots[s]||[]).map(key=>{
+          const it=resolve(key,{chores,actions,tasks}); if(!it) return null;
+          const dropped=plan.dropped[key],done=plan.done[key];
+          return (<div key={key} className={'row'+(done||dropped?' done':'')}>
+            <div className="body">
+              <div className="nm"><span className={'tag '+it.type}>{TYPE_LABEL[it.type]}</span>{it.name}</div>
+              <div className="sub">{dropped?'今日はやめた':it.note}</div>
+            </div>
+            {!dropped && <button className="tick" onClick={()=>check(key)}>{done?'やった':'やったよ'}</button>}
+          </div>);
+        })}
+      </div>
+    </div>))}
+
+    {carry && <CarrySheet carry={carry} chores={chores} actions={actions} tasks={tasks} work={plan.work}
+      onDone={(toEve,toDrop)=>{
+        patch(p=>{
+          const slots={...p.slots};
+          slots[carry.from]=(slots[carry.from]||[]).filter(k=>!toEve.includes(k));
+          slots.evening=[...(slots.evening||[]),...toEve];
+          p.slots=slots;
+          const dr={...p.dropped}; toDrop.forEach(k=>dr[k]=true); p.dropped=dr;
+        });
+        setStatus({date:d,phase:carry.next}); setCarry(null);
+      }}/>}
+    {bed && <DiarySheet date={d} init={logs[d]} onCancel={()=>setBed(false)} onSave={sleepNow}/>}
+  </div>);
+}
+
+function CarrySheet({carry,chores,actions,tasks,work,onDone}){
+  const [pick,setPick]=useState(()=>Object.fromEntries(carry.keys.map(k=>[k,'evening'])));
+  const all=v=>setPick(Object.fromEntries(carry.keys.map(k=>[k,v])));
+  return (<div className="mask"><div className="sheet">
+    <h2>{slotName(carry.from,work)}に残っているもの</h2>
+    <p className="lead">夜にまわすか、今日はやめるか決めてください。</p>
+    <div className="two" style={{marginBottom:12}}>
+      <button onClick={()=>all('evening')}>全部 夜にまわす</button>
+      <button onClick={()=>all('drop')}>全部 今日はやめる</button>
+    </div>
+    {carry.keys.map(k=>{
+      const it=resolve(k,{chores,actions,tasks}); if(!it) return null;
+      return (<div key={k} style={{marginBottom:12}}>
+        <div style={{fontWeight:500,marginBottom:6}}>{it.name}</div>
+        <div className="two">
+          <button className={pick[k]==='evening'?'k':''} onClick={()=>setPick({...pick,[k]:'evening'})}>夜にまわす</button>
+          <button className={pick[k]==='drop'?'k':''} onClick={()=>setPick({...pick,[k]:'drop'})}>今日はやめる</button>
+        </div>
+      </div>);
+    })}
+    <button className="btn" onClick={()=>onDone(
+      carry.keys.filter(k=>pick[k]==='evening'), carry.keys.filter(k=>pick[k]==='drop'))}>これで進む</button>
+  </div></div>);
+}
+
+function DiarySheet({date,init,onCancel,onSave}){
+  const [diary,setDiary]=useState(init?init.diary||'':'');
+  const [cond,setCond]=useState(init?init.cond||3:3);
+  return (<div className="mask"><div className="sheet">
+    <h2>{nice(date)} の一言</h2>
+    <p className="lead">一行でいいです。あとで読み返せます。</p>
+    <label className="f">今日の体調</label>
+    <div className="chips">{COND.map(c=>(
+      <button key={c.v} className={'chip'+(cond===c.v?' on':'')} onClick={()=>setCond(c.v)}>{c.m} {c.t}</button>))}</div>
+    <label className="f">一言日記</label>
+    <textarea value={diary} onChange={e=>setDiary(e.target.value)} placeholder="今日どうだった？"/>
+    <button className="btn" onClick={()=>onSave(diary,cond)}>書いて、ねる</button>
+    <button className="btn sm ghost" onClick={onCancel}>やめる</button>
+  </div></div>);
+}
+
+/* ---------- PLAN ---------- */
+function Plan({chores,actions,tasks,events,plans,setPlans}){
+  const [date,setDate]=useState(shift(today(),1));
+  const plan=normalize(plans[date]);
+  const patch=fn=>setPlans(p=>{const np={...p};np[date]=normalize({...(np[date]||{})});fn(np[date]);return np;});
+  const setWork=w=>setPlans(p=>({...p,[date]:{work:w,slots:{morning:[],mid:[],evening:[]},done:{},dropped:{}}}));
+
+  const assigned=useMemo(()=>plan?new Set(Object.values(plan.slots).flat()):new Set(),[plan]);
+  const pool=useMemo(()=>{
+    const out=[];
+    chores.filter(c=>choreDue(c,date)).forEach(c=>out.push({key:'chore:'+c.id,name:c.name,note:choreNote(c),type:'chore'}));
+    actions.forEach(a=>out.push({key:'action:'+a.id,name:a.name,note:'行動',type:'action'}));
+    tasks.filter(t=>!t.done).sort((a,b)=>ORDER.indexOf(quadOf(a,date))-ORDER.indexOf(quadOf(b,date)))
+      .forEach(t=>out.push({key:'task:'+t.id,name:t.name,type:'task',q:quadOf(t,date),
+        note:(t.kind==='work'?'仕事':'プライベート')+(t.deadline?` ／ 締切 ${nice(t.deadline)}`:'')}));
+    return out.filter(x=>!assigned.has(x.key));
+  },[chores,actions,tasks,date,assigned]);
+
+  const move=(key,slot)=>patch(p=>{
+    const slots={}; SLOTKEYS.forEach(s=>slots[s]=(p.slots[s]||[]).filter(k=>k!==key));
+    if(slot) slots[slot]=[...slots[slot],key];
+    p.slots=slots;
+  });
+
+  const dayEvents=events.filter(e=>e.date===date);
+  const nothing=chores.length===0&&actions.length===0&&tasks.filter(t=>!t.done).length===0;
+
+  return (<div className="screen">
+    <Head title="段取り" date={date}/>
+    <div className="chips" style={{marginBottom:14}}>
+      {[0,1,2].map(n=>{const s=shift(today(),n);return(
+        <button key={n} className={'chip'+(date===s?' on':'')} onClick={()=>setDate(s)}>
+          {n===0?'今日':n===1?'明日':nice(s)}</button>);})}
+    </div>
+
+    <p className="eyebrow">この日の予定</p>
+    <div className="card flat">
+      {dayEvents.length===0 && <div className="empty" style={{padding:'16px 10px'}}>予定なし</div>}
+      {dayEvents.map(e=>(<div className="row" key={e.id}><div className="body">
+        <div className="nm">{e.title}</div>
+        <div className="sub">{e.timeMode==='time'?e.time:'終日'} ／ {e.tag} ／ {e.when}</div>
+      </div></div>))}
+    </div>
+
+    {!plan && <div className="card">
+      <p className="eyebrow">{nice(date)} は</p>
+      <div className="chips">
+        <button className="chip on" onClick={()=>setWork(true)}>仕事</button>
+        <button className="chip" onClick={()=>setWork(false)}>休み</button>
+      </div>
+      <p className="hint">どちらでも 朝／真ん中／夜 の3枠に振り分けます。仕事の日は真ん中が「仕事中」、休みの日は「日中」になります。</p>
+    </div>}
+
+    {plan && <>
+      <p className="eyebrow mt">入れていないもの</p>
+      <div className="card flat">
+        {nothing && <div className="empty"><b>まだ何も登録されていません</b>「登録」タブで家事・行動・タスクを入れてください。</div>}
+        {!nothing && pool.length===0 && <div className="empty">全部どこかに入りました。</div>}
+        {pool.map(it=>(<div className="row" key={it.key}><div className="body">
+          <div className="nm">
+            <span className={'tag '+it.type}>{TYPE_LABEL[it.type]}</span>
+            {it.q && <span className={'tag '+it.q}>{QUAD[it.q].n}</span>}{it.name}
+          </div>
+          <div className="sub">{it.note}</div>
+          <div className="chips" style={{marginTop:6}}>
+            {SLOTKEYS.map(s=>(<button key={s} className="chip mini" onClick={()=>move(it.key,s)}>{slotName(s,plan.work)}へ</button>))}
+          </div>
+        </div></div>))}
+      </div>
+
+      <div className="card" style={{display:'flex',alignItems:'center',gap:10,marginTop:16}}>
+        <span style={{fontWeight:700,letterSpacing:'.1em'}}>{plan.work?'仕事の日':'休みの日'}</span>
+        <button className="chip mini" style={{marginLeft:'auto'}} onClick={()=>{
+          if(confirm('この日の振り分けを消してやり直しますか？')) setPlans(p=>{const np={...p};delete np[date];return np;});
+        }}>組み直す</button>
+      </div>
+
+      {SLOTKEYS.map(s=>(<div className="slotbox" key={s}>
+        <p className="slotttl">{slotName(s,plan.work)} <em>{(plan.slots[s]||[]).length}件</em></p>
+        <div className="card flat">
+          {(plan.slots[s]||[]).length===0 && <div className="empty" style={{padding:'16px 10px'}}>上から選んで入れる</div>}
+          {(plan.slots[s]||[]).map(key=>{
+            const it=resolve(key,{chores,actions,tasks}); if(!it) return null;
+            return (<div className="row" key={key}>
+              <div className="body">
+                <div className="nm"><span className={'tag '+it.type}>{TYPE_LABEL[it.type]}</span>{it.name}</div>
+                <div className="sub">{it.note}</div>
+                <div className="chips" style={{marginTop:6}}>
+                  {SLOTKEYS.filter(o=>o!==s).map(o=>(
+                    <button key={o} className="chip mini" onClick={()=>move(key,o)}>{slotName(o,plan.work)}へ</button>))}
+                </div>
+              </div>
+              <button className="x" onClick={()=>move(key,null)}>×</button>
+            </div>);
+          })}
+        </div>
+      </div>))}
+    </>}
+  </div>);
+}
+
+/* ---------- REGISTER ---------- */
+function Register(props){
+  const [t,setT]=useState('chore');
+  return (<div className="screen">
+    <Head title="登録"/>
+    <div className="chips" style={{marginBottom:14}}>
+      {[['chore','家事'],['action','行動'],['task','タスク'],['event','予定']].map(([k,l])=>(
+        <button key={k} className={'chip'+(t===k?' on':'')} onClick={()=>setT(k)}>{l}</button>))}
+    </div>
+    {t==='chore'&&<ChoreForm {...props}/>}
+    {t==='action'&&<ActionForm {...props}/>}
+    {t==='task'&&<TaskForm {...props}/>}
+    {t==='event'&&<EventForm {...props}/>}
+  </div>);
+}
+
+function ChoreForm({chores,setChores}){
+  const [name,setName]=useState(''),[type,setType]=useState('daily'),[n,setN]=useState(3),[days,setDays]=useState([]);
+  return (<>
+    <div className="card">
+      <label className="f">家事の名前</label>
+      <input type="text" value={name} onChange={e=>setName(e.target.value)} placeholder="洗濯を回す"/>
+      <label className="f">やる間隔</label>
+      <div className="chips">{[['daily','毎日'],['everyN','⚪︎日に一回'],['weekly','週一'],['monthly','月一'],['weekdays','特定の曜日']].map(([k,l])=>(
+        <button key={k} className={'chip'+(type===k?' on':'')} onClick={()=>setType(k)}>{l}</button>))}</div>
+      {type==='everyN'&&<><label className="f">何日に一回</label>
+        <input type="number" min="2" value={n} onChange={e=>setN(+e.target.value)}/></>}
+      {type==='weekdays'&&<><label className="f">曜日</label>
+        <div className="chips">{WD.map((w,i)=>(<button key={i} className={'chip'+(days.includes(i)?' on':'')}
+          onClick={()=>setDays(days.includes(i)?days.filter(x=>x!==i):[...days,i].sort())}>{w}</button>))}</div></>}
+      <button className="btn" onClick={()=>{if(!name.trim())return;
+        setChores([...chores,{id:uid(),name:name.trim(),interval:{type,n,days},lastDone:null}]);
+        setName('');setDays([]);}}>家事を登録する</button>
+    </div>
+    <List items={chores} onDel={id=>setChores(chores.filter(c=>c.id!==id))}
+      render={c=>[c.name,choreNote(c)+(c.lastDone?` ／ 最後にやった日 ${nice(c.lastDone)}`:' ／ まだ')]}/>
+  </>);
+}
+
+function ActionForm({actions,setActions}){
+  const [name,setName]=useState('');
+  return (<>
+    <div className="card">
+      <label className="f">行動の名前</label>
+      <input type="text" value={name} onChange={e=>setName(e.target.value)} placeholder="荷物の準備"/>
+      <p className="hint">ここに登録したものだけが、段取り画面で選べます。</p>
+      <button className="btn" onClick={()=>{if(!name.trim())return;
+        setActions([...actions,{id:uid(),name:name.trim()}]);setName('');}}>行動を登録する</button>
+    </div>
+    <List items={actions} onDel={id=>setActions(actions.filter(a=>a.id!==id))} render={a=>[a.name,'行動']}/>
+  </>);
+}
+
+function TaskForm({tasks,setTasks}){
+  const [name,setName]=useState(''),[kind,setKind]=useState('work');
+  const [hasDl,setHasDl]=useState(null),[dl,setDl]=useState(''),[impact,setImpact]=useState(null);
+  const preview=impact===null?null:quadOf({deadline:hasDl?dl:'',impact},today());
+  return (<>
+    <div className="card">
+      <label className="f">タスクの名前</label>
+      <input type="text" value={name} onChange={e=>setName(e.target.value)} placeholder="請求書をまとめる"/>
+      <label className="f">どっちのタスク</label>
+      <div className="chips">
+        <button className={'chip'+(kind==='work'?' on':'')} onClick={()=>setKind('work')}>仕事</button>
+        <button className={'chip'+(kind==='private'?' on':'')} onClick={()=>setKind('private')}>プライベート</button>
+      </div>
+      <hr className="s"/>
+      <label className="f">明確な締め切りはある？</label>
+      <div className="chips">
+        <button className={'chip'+(hasDl===true?' on':'')} onClick={()=>setHasDl(true)}>ある</button>
+        <button className={'chip'+(hasDl===false?' on':'')} onClick={()=>{setHasDl(false);setDl('')}}>ない</button>
+      </div>
+      {hasDl&&<><label className="f">それはいつ</label>
+        <input type="date" value={dl} onChange={e=>setDl(e.target.value)}/></>}
+      <label className="f">やらないことによる影響は大きい？</label>
+      <div className="chips">
+        <button className={'chip'+(impact===true?' on':'')} onClick={()=>setImpact(true)}>大きい</button>
+        <button className={'chip'+(impact===false?' on':'')} onClick={()=>setImpact(false)}>そうでもない</button>
+      </div>
+      {preview&&<div style={{marginTop:14,padding:'12px 14px',background:'#F5F8FC',borderRadius:11}}>
+        <span className={'tag '+preview}>{QUAD[preview].n}</span>
+        <div style={{marginTop:4,fontSize:12,color:'var(--muted)'}}>{QUAD[preview].s}</div>
+        <p className="hint">緊急かどうかは締め切りまでの日数（3日以内）で毎日ひとりでに決まります。決めるのは「影響が大きいか」だけ。</p>
+      </div>}
+      <button className="btn" onClick={()=>{if(!name.trim()||impact===null)return;
+        setTasks([...tasks,{id:uid(),name:name.trim(),kind,deadline:hasDl?dl:'',impact,done:false}]);
+        setName('');setHasDl(null);setDl('');setImpact(null);}}>タスクを登録する</button>
+    </div>
+    <List items={tasks.filter(t=>!t.done)} onDel={id=>setTasks(tasks.filter(t=>t.id!==id))}
+      render={t=>[t.name,`${QUAD[quadOf(t,today())].n} ／ ${t.kind==='work'?'仕事':'プライベート'}${t.deadline?` ／ 締切 ${nice(t.deadline)}`:''}`]}/>
+  </>);
+}
+
+function EventForm({events,setEvents}){
+  const [title,setTitle]=useState(''),[date,setDate]=useState(today());
+  const [timeMode,setTimeMode]=useState('allday'),[time,setTime]=useState('');
+  const [tag,setTag]=useState(TAGS[0]),[when,setWhen]=useState(WHENS[0]);
+  return (<>
+    <div className="card">
+      <label className="f">予定の名前</label>
+      <input type="text" value={title} onChange={e=>setTitle(e.target.value)} placeholder="友だちとごはん"/>
+      <label className="f">日付</label>
+      <input type="date" value={date} onChange={e=>setDate(e.target.value)}/>
+      <label className="f">時間</label>
+      <div className="chips">
+        <button className={'chip'+(timeMode==='allday'?' on':'')} onClick={()=>setTimeMode('allday')}>終日</button>
+        <button className={'chip'+(timeMode==='time'?' on':'')} onClick={()=>setTimeMode('time')}>時間を決める</button>
+      </div>
+      {timeMode==='time'&&<input style={{marginTop:8}} type="time" value={time} onChange={e=>setTime(e.target.value)}/>}
+      <label className="f">タグ</label>
+      <div className="chips">{TAGS.map(t=>(<button key={t} className={'chip'+(tag===t?' on':'')} onClick={()=>setTag(t)}>{t}</button>))}</div>
+      <label className="f">いつの予定</label>
+      <div className="chips">{WHENS.map(w=>(<button key={w} className={'chip'+(when===w?' on':'')} onClick={()=>setWhen(w)}>{w}</button>))}</div>
+      <button className="btn" onClick={()=>{if(!title.trim())return;
+        setEvents([...events,{id:uid(),title:title.trim(),date,timeMode,time,tag,when}].sort((a,b)=>a.date<b.date?-1:1));
+        setTitle('');setTime('');}}>予定を登録する</button>
+    </div>
+    <List items={events.filter(e=>e.date>=today())} onDel={id=>setEvents(events.filter(e=>e.id!==id))}
+      render={e=>[e.title,`${nice(e.date)} ${e.timeMode==='time'?e.time:'終日'} ／ ${e.tag} ／ ${e.when}`]}/>
+  </>);
+}
+
+/* ---------- LOOK BACK ---------- */
+function Look({logs,setLogs,nights}){
+  const [edit,setEdit]=useState(null);
+  const recent=useMemo(()=>[...nights].sort((a,b)=>a.date<b.date?1:-1).slice(0,14),[nights]);
+  const avg=recent.length?Math.round(recent.slice(0,7).reduce((s,n)=>s+n.min,0)/Math.min(7,recent.length)):0;
+  const dates=useMemo(()=>{
+    const set=new Set([...Object.keys(logs),...nights.map(n=>n.date)]);
+    return [...set].sort().reverse().slice(0,60);
+  },[logs,nights]);
+  const nightOf=d=>nights.find(n=>n.date===d);
+
+  return (<div className="screen">
+    <Head title="ふりかえり"/>
+    <p className="eyebrow">睡眠</p>
+    <div className="card">
+      {recent.length===0 && <div className="empty" style={{padding:'10px'}}>
+        「ねる」と「おきた」を押すと、その間の時間が記録されます。</div>}
+      {recent.length>0 && <>
+        <div className="big num">{Math.floor(avg/60)}<small>時間</small>{pad(avg%60)}<small>分</small></div>
+        <div style={{fontSize:12,color:'var(--muted)',marginTop:-4}}>直近{Math.min(7,recent.length)}日の平均</div>
+      </>}
+    </div>
+    {recent.length>0 && <div className="card flat">
+      {recent.map(n=>(<div className="sleep" key={n.id}>
+        <span className="dy num">{nice(n.date).slice(0,-3)}</span>
+        <span className="track"><span className={'fill'+(n.min<360?' short':'')}
+          style={{width:Math.min(100,n.min/600*100)+'%'}}/></span>
+        <span className="hh num">{hhmm(n.min)}</span>
+      </div>))}
+      <div className="row"><div className="body"><div className="sub">
+        {clock(recent[0].bedAt)} に就寝 → {clock(recent[0].wakeAt)} に起床（いちばん新しい記録）</div></div></div>
+    </div>}
+
+    <p className="eyebrow mt">日記</p>
+    {dates.length===0 && <div className="card"><div className="empty">
+      <b>まだ記録がありません</b>「ねる」を押すと、その日の一言を書けます。</div></div>}
+    {dates.map(d=>{
+      const l=logs[d],n=nightOf(d);
+      if(!l&&!n) return null;
+      const c=COND.find(x=>x.v===(l&&l.cond))||null;
+      return (<div className="card" key={d}>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          {c&&<span className={'cond c'+c.v}>{c.m}</span>}
+          <b style={{fontSize:14,letterSpacing:'.06em'}}>{nice(d)}</b>
+          <span style={{marginLeft:'auto',fontSize:11.5,color:'var(--muted)'}} className="num">{n?hhmm(n.min):''}</span>
+        </div>
+        {l&&l.diary?<p className="diary">{l.diary}</p>
+          :<p className="diary" style={{color:'var(--muted)'}}>（一言なし）</p>}
+        <button className="chip mini" style={{marginTop:10}} onClick={()=>setEdit(d)}>書きなおす</button>
+      </div>);
+    })}
+    {edit && <DiarySheet date={edit} init={logs[edit]} onCancel={()=>setEdit(null)}
+      onSave={(diary,cond)=>{setLogs(l=>({...l,[edit]:{...(l[edit]||{}),diary,cond}}));setEdit(null);}}/>}
+  </div>);
+}
+
+/* ---------- BODY ---------- */
+function Body({health,setHealth}){
+  const d=today();
+  const h={pill:{},bleed:{},visits:[],sick:[],...health};
+  const upd=fn=>setHealth(prev=>{const n={pill:{},bleed:{},visits:[],sick:[],...prev};fn(n);return n;});
+  const last14=[...Array(14)].map((_,i)=>shift(d,-13+i));
+  const streak=useMemo(()=>{let c=0,cur=d;while(h.pill[cur]){c++;cur=shift(cur,-1);}return c;},[h.pill,d]);
+  const bleedDays=Object.keys(h.bleed).filter(k=>h.bleed[k]).sort();
+  const lastBleed=bleedDays.length?bleedDays[bleedDays.length-1]:null;
+  const [vDate,setVDate]=useState(d),[vPlace,setVPlace]=useState(''),[vNote,setVNote]=useState('');
+  const [sDate,setSDate]=useState(d),[sWhat,setSWhat]=useState(''),[sCare,setSCare]=useState('');
+
+  return (<div className="screen">
+    <Head title="からだ" date={d}/>
+    <p className="eyebrow">きょう</p>
+    <div className="card">
+      <div style={{display:'flex',alignItems:'center',gap:10}}>
+        <div style={{flex:1}}>
+          <div style={{fontWeight:700}}>ピル</div>
+          <div style={{fontSize:11.5,color:'var(--muted)'}}>{streak>0?`${streak}日つづけて記録中`:'今日はまだ'}</div>
+        </div>
+        <button className={'chip'+(h.pill[d]?' on':'')} onClick={()=>upd(n=>{n.pill={...n.pill,[d]:!n.pill[d]}})}>
+          {h.pill[d]?'飲んだ':'飲んだら押す'}</button>
+      </div>
+      <div className="dots">{last14.map(x=>(
+        <i key={x} className={h.pill[x]?'y':''}>{new Date(x+'T00:00:00').getDate()}</i>))}</div>
+      <hr className="s"/>
+      <div style={{display:'flex',alignItems:'center',gap:10}}>
+        <div style={{flex:1}}>
+          <div style={{fontWeight:700}}>消退出血</div>
+          <div style={{fontSize:11.5,color:'var(--muted)'}}>
+            {lastBleed?`最後の記録 ${nice(lastBleed)}（${bleedDays.length}日ぶん）`:'記録なし'}</div>
+        </div>
+        <button className={'chip'+(h.bleed[d]?' on':'')} onClick={()=>upd(n=>{n.bleed={...n.bleed,[d]:!n.bleed[d]}})}>
+          {h.bleed[d]?'あった':'あったら押す'}</button>
+      </div>
+      <div className="dots">{last14.map(x=>(
+        <i key={x} className={h.bleed[x]?'b':''}>{new Date(x+'T00:00:00').getDate()}</i>))}</div>
+    </div>
+
+    <p className="eyebrow mt">通院</p>
+    <div className="card">
+      <label className="f">日付</label>
+      <input type="date" value={vDate} onChange={e=>setVDate(e.target.value)}/>
+      <label className="f">どこ</label>
+      <input type="text" value={vPlace} onChange={e=>setVPlace(e.target.value)} placeholder="○○クリニック"/>
+      <label className="f">メモ</label>
+      <input type="text" value={vNote} onChange={e=>setVNote(e.target.value)} placeholder="次回は3か月後 など"/>
+      <button className="btn sm" onClick={()=>{if(!vPlace.trim())return;
+        upd(n=>{n.visits=[{id:uid(),date:vDate,place:vPlace.trim(),note:vNote.trim()},...n.visits]
+          .sort((a,b)=>a.date<b.date?1:-1)});
+        setVPlace('');setVNote('');}}>通院を記録する</button>
+    </div>
+    <List items={h.visits} onDel={id=>upd(n=>{n.visits=n.visits.filter(v=>v.id!==id)})}
+      render={v=>[v.place,`${nice(v.date)}${v.note?' ／ '+v.note:''}`]}/>
+
+    <p className="eyebrow mt">体調不良</p>
+    <div className="card">
+      <label className="f">日付</label>
+      <input type="date" value={sDate} onChange={e=>setSDate(e.target.value)}/>
+      <label className="f">どんな体調不良</label>
+      <input type="text" value={sWhat} onChange={e=>setSWhat(e.target.value)} placeholder="朝から頭が重い"/>
+      <label className="f">どう対応した</label>
+      <input type="text" value={sCare} onChange={e=>setSCare(e.target.value)} placeholder="早めに寝た／薬を飲んだ など"/>
+      <button className="btn sm" onClick={()=>{if(!sWhat.trim())return;
+        upd(n=>{n.sick=[{id:uid(),date:sDate,what:sWhat.trim(),care:sCare.trim()},...n.sick]
+          .sort((a,b)=>a.date<b.date?1:-1)});
+        setSWhat('');setSCare('');}}>体調不良を記録する</button>
+    </div>
+    <List items={h.sick} onDel={id=>upd(n=>{n.sick=n.sick.filter(s=>s.id!==id)})}
+      render={s=>[s.what,`${nice(s.date)}${s.care?' ／ '+s.care:''}`]}/>
+  </div>);
+}
+
+/* ---------- shared ---------- */
+function List({items,render,onDel}){
+  if(!items||!items.length) return <div className="card"><div className="empty">まだ何もありません。</div></div>;
+  return (<div className="card flat">
+    {items.map(it=>{const [a,b]=render(it);return(
+      <div className="row" key={it.id}>
+        <div className="body"><div className="nm">{a}</div><div className="sub">{b}</div></div>
+        <button className="x" onClick={()=>{if(confirm(`「${a}」を削除しますか？`))onDel(it.id)}}>×</button>
+      </div>);})}
+  </div>);
+}
+function Head({title,date,onGear}){
+  return (<div className="hd">
+    <h1>{title}</h1>
+    {date&&<span className="date num">{nice(date)}</span>}
+    {onGear&&<button className="gear" onClick={onGear} aria-label="データの持ち出し">⚙</button>}
+  </div>);
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
