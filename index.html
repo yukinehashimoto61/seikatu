@@ -179,7 +179,7 @@ hr.s{border:0;border-top:1px solid var(--border);margin:14px 0}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <script type="text/babel">
 const {useState,useEffect,useMemo} = React;
-const VERSION = 'v12 ・ 2026-08-12';
+const VERSION = 'v13 ・ 2026-08-12';
 
 /* ---------- storage ---------- */
 let LS=null;
@@ -265,6 +265,8 @@ const quadOf=(t,date)=>{
 };
 const SLOTKEYS=['morning','mid','evening'];
 const slotName=(k,work)=>k==='morning'?'朝':k==='evening'?'夜':(work?'仕事中':'日中');
+const slotLabel=k=>k==='morning'?'朝':k==='evening'?'夜':'日中・仕事中';
+const actSlots=a=>(a.slots&&a.slots.length?a.slots:SLOTKEYS);
 const TAGS=['職場関連','人と会う','おひとりさまタイム'];
 const WHENS=['休日','仕事中','平日朝時間','退勤後'];
 const COND=[{v:4,m:'◎',t:'good'},{v:3,m:'○',t:'ふつう'},{v:2,m:'△',t:'いまいち'},{v:1,m:'×',t:'つらい'}];
@@ -630,7 +632,10 @@ function Plan({chores,actions,tasks,events,plans,setPlans,day}){
       (st.group==='daily'?daily:sometimes).push(item);
     });
     sometimes.sort((a,b)=>a.left-b.left);
-    actions.forEach(a=>acts.push({key:'action:'+a.id,name:a.name,note:'行動',type:'action'}));
+    actions.forEach(a=>{const sl=actSlots(a);
+      acts.push({key:'action:'+a.id,name:a.name,type:'action',slots:sl,
+        note:sl.length===3?'いつでも':sl.map(k=>slotName(k,plan&&plan.work)).join('・')});});
+    acts.sort((a,b)=>SLOTKEYS.indexOf(a.slots[0])-SLOTKEYS.indexOf(b.slots[0]));
     tasks.filter(t=>!t.done).sort((a,b)=>ORDER.indexOf(quadOf(a,date))-ORDER.indexOf(quadOf(b,date)))
       .forEach(t=>tsks.push({key:'task:'+t.id,name:t.name,type:'task',q:quadOf(t,date),
         note:(t.kind==='work'?'仕事':'プライベート')+(t.deadline?` ／ 締切 ${nice(t.deadline)}`:'')}));
@@ -661,7 +666,7 @@ function Plan({chores,actions,tasks,events,plans,setPlans,day}){
           </div>
           <div className="sub">{it.note}</div>
           <div className="chips" style={{marginTop:6}}>
-            {SLOTKEYS.map(s=>(<button key={s} className="chip mini" onClick={()=>move(it.key,s)}>{slotName(s,plan.work)}へ</button>))}
+            {(it.slots||SLOTKEYS).map(s=>(<button key={s} className="chip mini" onClick={()=>move(it.key,s)}>{slotName(s,plan.work)}へ</button>))}
           </div>
         </div></div>);
       })}
@@ -797,15 +802,24 @@ function ChoreForm({chores,setChores}){
 
 function ActionForm({actions,setActions}){
   const [name,setName]=useState('');
+  const [slots,setSlots]=useState([]);
+  const toggle=k=>setSlots(slots.includes(k)?slots.filter(x=>x!==k):SLOTKEYS.filter(x=>slots.includes(x)||x===k));
   return (<>
     <div className="card">
       <label className="f">行動の名前</label>
       <input type="text" value={name} onChange={e=>setName(e.target.value)} placeholder="荷物の準備"/>
-      <p className="hint">ここに登録したものだけが、段取り画面で選べます。</p>
-      <button className="btn" disabled={!name.trim()} onClick={()=>{
-        setActions([...actions,{id:uid(),name:name.trim()}]);setName('');}}>行動を登録する</button>
+      <label className="f">いつやる</label>
+      <div className="chips">{SLOTKEYS.map(k=>(
+        <button key={k} className={'chip'+(slots.includes(k)?' on':'')} onClick={()=>toggle(k)}>{slotLabel(k)}</button>))}
+        <button className={'chip'+(slots.length===3?' on':'')} onClick={()=>setSlots([...SLOTKEYS])}>いつでも</button>
+      </div>
+      <p className="hint">選んだ時間帯にだけ、段取り画面で出てきます。いくつ選んでもかまいません。</p>
+      {slots.length===0&&<p className="hint" style={{color:'var(--urgent)'}}>ひとつ以上えらんでください</p>}
+      <button className="btn" disabled={!name.trim()||slots.length===0} onClick={()=>{
+        setActions([...actions,{id:uid(),name:name.trim(),slots}]);setName('');setSlots([]);}}>行動を登録する</button>
     </div>
-    <List items={actions} onDel={id=>setActions(actions.filter(a=>a.id!==id))} render={a=>[a.name,'行動']}/>
+    <List items={actions} onDel={id=>setActions(actions.filter(a=>a.id!==id))}
+      render={a=>[a.name,actSlots(a).length===3?'いつでも':actSlots(a).map(slotLabel).join('・')]}/>
   </>);
 }
 
