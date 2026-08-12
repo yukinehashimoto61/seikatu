@@ -179,7 +179,7 @@ hr.s{border:0;border-top:1px solid var(--border);margin:14px 0}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <script type="text/babel">
 const {useState,useEffect,useMemo} = React;
-const VERSION = 'v13 ・ 2026-08-12';
+const VERSION = 'v14 ・ 2026-08-12';
 
 /* ---------- storage ---------- */
 let LS=null;
@@ -449,7 +449,8 @@ function Home({chores,setChores,actions,tasks,setTasks,events,plans,setPlans,sta
   const cur=stations.find(s=>s.k===phase);
 
   const patch=fn=>setPlans(p=>{const np={...p};np[d]=normalize({...np[d]});fn(np[d]);return np;});
-  const left=slot=>((plan&&plan.slots[slot])||[]).filter(k=>!plan.done[k]&&!plan.dropped[k]);
+  const dk=(s,k)=>s+'|'+k;
+  const left=slot=>((plan&&plan.slots[slot])||[]).filter(k=>!plan.done[dk(slot,k)]&&!plan.dropped[dk(slot,k)]);
 
   const wake=()=>{
     if(pending){
@@ -476,9 +477,10 @@ function Home({chores,setChores,actions,tasks,setTasks,events,plans,setPlans,sta
     setStatus({date:key,phase:'sleep'});
     setBed(false);
   };
-  const check=key=>{
-    const was=plan.done[key];
-    patch(p=>{p.done={...p.done,[key]:!was}});
+  const check=(slot,key)=>{
+    const k2=dk(slot,key);
+    const was=plan.done[k2];
+    patch(p=>{p.done={...p.done,[k2]:!was}});
     const [type,id]=key.split(':');
     if(!was){
       if(type==='chore') setChores(cs=>cs.map(c=>c.id===id?{...c,lastDone:d}:c));
@@ -537,13 +539,13 @@ function Home({chores,setChores,actions,tasks,setTasks,events,plans,setPlans,sta
         {(plan.slots[s]||[]).length===0 && <div className="empty"><b>この時間帯は空です</b>ゆっくりどうぞ。</div>}
         {(plan.slots[s]||[]).map(key=>{
           const it=resolve(key,{chores,actions,tasks}); if(!it) return null;
-          const dropped=plan.dropped[key],done=plan.done[key];
+          const dropped=plan.dropped[dk(s,key)],done=plan.done[dk(s,key)];
           return (<div key={key} className={'row'+(done||dropped?' done':'')}>
             <div className="body">
               <div className="nm"><span className={'tag '+it.type}>{TYPE_LABEL[it.type]}</span>{it.name}</div>
               <div className="sub">{dropped?'今日はやめた':it.note}</div>
             </div>
-            {!dropped && <button className="tick" onClick={()=>check(key)}>{done?'やった':'やったよ'}</button>}
+            {!dropped && <button className="tick" onClick={()=>check(s,key)}>{done?'やった':'やったよ'}</button>}
           </div>);
         })}
       </div>
@@ -556,7 +558,7 @@ function Home({chores,setChores,actions,tasks,setTasks,events,plans,setPlans,sta
           slots[carry.from]=(slots[carry.from]||[]).filter(k=>!toEve.includes(k));
           slots.evening=[...(slots.evening||[]),...toEve];
           p.slots=slots;
-          const dr={...p.dropped}; toDrop.forEach(k=>dr[k]=true); p.dropped=dr;
+          const dr={...p.dropped}; toDrop.forEach(k=>dr[dk(carry.from,k)]=true); p.dropped=dr;
         });
         setStatus({date:d,phase:carry.next}); setCarry(null);
       }}/>}
@@ -644,10 +646,32 @@ function Plan({chores,actions,tasks,events,plans,setPlans,day}){
   },[chores,actions,tasks,date,assigned,plan]);
 
   const move=(key,slot)=>patch(p=>{
-    const slots={}; SLOTKEYS.forEach(s=>slots[s]=(p.slots[s]||[]).filter(k=>k!==key));
-    if(slot) slots[slot]=[...slots[slot],key];
-    p.slots=slots;
+    const ex={...(p.exAuto||{})}; const slots={};
+    SLOTKEYS.forEach(s=>{
+      const had=(p.slots[s]||[]).includes(key);
+      slots[s]=(p.slots[s]||[]).filter(k=>k!==key);
+      if(had&&s!==slot) ex[s+'|'+key]=true;
+    });
+    if(slot){ slots[slot]=[...slots[slot],key]; delete ex[slot+'|'+key]; }
+    p.slots=slots; p.exAuto=ex;
   });
+
+  /* 時間帯を決めてある行動は、毎日その枠に自動で入れる（「いつでも」は入れない） */
+  useEffect(()=>{
+    if(!plan||plan.fixed) return;
+    const ex=plan.exAuto||{};
+    const now=new Set(SLOTKEYS.flatMap(s=>(plan.slots[s]||[]).map(k=>s+'|'+k)));
+    const add=[];
+    actions.forEach(a=>{
+      const sl=actSlots(a); if(sl.length>=SLOTKEYS.length) return;
+      sl.forEach(s=>{ const k='action:'+a.id; if(!now.has(s+'|'+k)&&!ex[s+'|'+k]) add.push([s,k]); });
+    });
+    if(add.length) patch(p=>{
+      const slots={...p.slots};
+      add.forEach(([s,k])=>{slots[s]=[...(slots[s]||[]),k]});
+      p.slots=slots;
+    });
+  },[date,plan,actions]);
 
   const dayEvents=events.filter(e=>e.date===date);
   const total=plan?Object.values(plan.slots).flat().length:0;
@@ -813,7 +837,7 @@ function ActionForm({actions,setActions}){
         <button key={k} className={'chip'+(slots.includes(k)?' on':'')} onClick={()=>toggle(k)}>{slotLabel(k)}</button>))}
         <button className={'chip'+(slots.length===3?' on':'')} onClick={()=>setSlots([...SLOTKEYS])}>いつでも</button>
       </div>
-      <p className="hint">選んだ時間帯にだけ、段取り画面で出てきます。いくつ選んでもかまいません。</p>
+      <p className="hint">選んだ時間帯に、毎日そのまま入ります。いくつ選んでもかまいません。「いつでも」だけは自動で入らず、段取りのときに自分で選びます。</p>
       {slots.length===0&&<p className="hint" style={{color:'var(--urgent)'}}>ひとつ以上えらんでください</p>}
       <button className="btn" disabled={!name.trim()||slots.length===0} onClick={()=>{
         setActions([...actions,{id:uid(),name:name.trim(),slots}]);setName('');setSlots([]);}}>行動を登録する</button>
