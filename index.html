@@ -117,6 +117,11 @@ input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid v
 .empty{text-align:center;color:var(--muted);font-size:13.5px;padding:26px 10px}
 .empty b{display:block;color:var(--ink2);font-weight:700;margin-bottom:4px;font-size:14.5px}
 
+.upd{flex:0 0 auto;background:var(--deep);color:#fff;display:flex;align-items:center;gap:10px;
+  padding:12px 14px calc(12px + env(safe-area-inset-top)/2);font-size:13.5px;font-weight:700;letter-spacing:.04em}
+.upd button{font:inherit;font-size:12.5px;font-weight:700;border:0;border-radius:999px;
+  padding:8px 15px;background:#fff;color:var(--deep);cursor:pointer;flex:0 0 auto;margin-left:auto}
+.upd button.cl{background:transparent;color:rgba(255,255,255,.8);font-size:18px;padding:2px 4px;margin-left:0}
 nav{flex:0 0 auto;background:rgba(255,255,255,.96);border-top:1px solid var(--border);
   display:flex;padding-bottom:env(safe-area-inset-bottom)}
 nav button{flex:1;border:0;background:transparent;font:inherit;font-size:10px;letter-spacing:.06em;
@@ -174,7 +179,7 @@ hr.s{border:0;border-top:1px solid var(--border);margin:14px 0}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <script type="text/babel">
 const {useState,useEffect,useMemo} = React;
-const VERSION = 'v11 ・ 2026-08-12';
+const VERSION = 'v12 ・ 2026-08-12';
 
 /* ---------- storage ---------- */
 let LS=null;
@@ -214,15 +219,20 @@ const monthEnd=s=>{const d=new Date(s+'T00:00:00');return dstr(new Date(d.getFul
 function choreNote(c){
   const iv=c.interval||{};
   if(iv.type==='daily') return '毎日';
+  if(iv.type==='workday') return '仕事の日のみ';
   if(iv.type==='everyN') return `${iv.n}日に一回`;
   if(iv.type==='weekly') return '週に一回';
   if(iv.type==='monthly') return '月に一回';
   return (iv.days||[]).map(d=>WD[d]).join('・')+'曜';
 }
 /* null = その日は出さない。group: daily(毎日のこと) / sometimes(ときどきのこと) */
-function choreState(c,date){
+function choreState(c,date,isWork){
   const iv=c.interval||{};
   if(iv.type==='daily') return c.lastDone===date?null:{group:'daily',note:'毎日'};
+  if(iv.type==='workday'){
+    if(!isWork) return null;
+    return c.lastDone===date?null:{group:'daily',note:'仕事の日のみ'};
+  }
   if(iv.type==='weekdays'){
     if(!(iv.days||[]).includes(wdOf(date))) return null;
     return c.lastDone===date?null:{group:'daily',note:`${WD[wdOf(date)]}曜日`};
@@ -302,6 +312,30 @@ function importAll(file,done){
   r.readAsText(file);
 }
 
+/* ---------- 更新の検知 ---------- */
+const reloadFresh=()=>location.replace(location.pathname+'?v='+Date.now());
+function useUpdateCheck(){
+  const [found,setFound]=useState(false);
+  const [hidden,setHidden]=useState(false);
+  useEffect(()=>{
+    let stop=false;
+    const check=()=>{
+      fetch(location.pathname+'?_='+Date.now(),{cache:'no-store'})
+        .then(r=>r.text())
+        .then(t=>{
+          const m=t.match(/const VERSION\s*=\s*'([^']+)'/);
+          if(!stop&&m&&m[1]!==VERSION) setFound(true);
+        }).catch(()=>{});
+    };
+    check();
+    const id=setInterval(check,1000*60*20);
+    const onVis=()=>{ if(document.visibilityState==='visible') check(); };
+    document.addEventListener('visibilitychange',onVis);
+    return ()=>{stop=true;clearInterval(id);document.removeEventListener('visibilitychange',onVis);};
+  },[]);
+  return [found&&!hidden,()=>setHidden(true)];
+}
+
 /* ---------- app ---------- */
 /* v6以前は0時に日付を勝手に進めていた。その書き込みを一度だけ取り消す */
 (function fixOldRollover(){
@@ -316,6 +350,7 @@ function importAll(file,done){
 function App(){
   const [tab,setTab]=useState('home');
   const [gear,setGear]=useState(false);
+  const [hasUpdate,dismissUpdate]=useUpdateCheck();
   const [chores,setChores]=useStored('lm_chores',[]);
   const [actions,setActions]=useStored('lm_actions',[]);
   const [tasks,setTasks]=useStored('lm_tasks',[]);
@@ -332,6 +367,11 @@ function App(){
     予定:events.length,日記:Object.keys(logs).length,睡眠:nights.length};
 
   return (<>
+    {hasUpdate && <div className="upd">
+      <span>新しいバージョンがあります</span>
+      <button onClick={reloadFresh}>読み込み直す</button>
+      <button className="cl" onClick={dismissUpdate} aria-label="閉じる">×</button>
+    </div>}
     {tab==='home'&&<Home {...lib} status={status} setStatus={setStatus} onGear={()=>setGear(true)}
       logs={logs} setLogs={setLogs} nights={nights} setNights={setNights}
       pending={pending} setPending={setPending}/>}
@@ -366,8 +406,7 @@ function Backup({counts,onClose}){
         <span>いま動いているアプリ</span><span className="num" style={{marginLeft:'auto'}}>{VERSION}</span>
       </div>
     </div>
-    <button className="btn" onClick={()=>location.replace(location.pathname+'?v='+Date.now())}>
-      最新に更新する</button>
+    <button className="btn" onClick={reloadFresh}>最新に更新する</button>
     <p className="hint">GitHubのファイルを差し替えたのに変わらないときに押してください。データは消えません。</p>
     <button className="btn" onClick={exportAll}>ぜんぶ書き出す</button>
     <label className="file">
@@ -586,7 +625,7 @@ function Plan({chores,actions,tasks,events,plans,setPlans,day}){
   const groups=useMemo(()=>{
     const daily=[],sometimes=[],acts=[],tsks=[];
     chores.forEach(c=>{
-      const st=choreState(c,date); if(!st) return;
+      const st=choreState(c,date,!!(plan&&plan.work)); if(!st) return;
       const item={key:'chore:'+c.id,name:c.name,note:st.note,type:'chore',left:st.left};
       (st.group==='daily'?daily:sometimes).push(item);
     });
@@ -597,7 +636,7 @@ function Plan({chores,actions,tasks,events,plans,setPlans,day}){
         note:(t.kind==='work'?'仕事':'プライベート')+(t.deadline?` ／ 締切 ${nice(t.deadline)}`:'')}));
     const f=a=>a.filter(x=>!assigned.has(x.key));
     return {daily:f(daily),sometimes:f(sometimes),acts:f(acts),tsks:f(tsks)};
-  },[chores,actions,tasks,date,assigned]);
+  },[chores,actions,tasks,date,assigned,plan]);
 
   const move=(key,slot)=>patch(p=>{
     const slots={}; SLOTKEYS.forEach(s=>slots[s]=(p.slots[s]||[]).filter(k=>k!==key));
@@ -723,25 +762,33 @@ function Register(props){
 }
 
 function ChoreForm({chores,setChores}){
-  const [name,setName]=useState(''),[type,setType]=useState(null),[n,setN]=useState(3),[days,setDays]=useState([]);
-  const ok=name.trim()&&type&&(type!=='weekdays'||days.length>0);
+  const [name,setName]=useState(''),[type,setType]=useState(null),[n,setN]=useState(''),[days,setDays]=useState([]);
+  const nNum=parseInt(n,10);
+  const nBad=type==='everyN'&&!(nNum>=2);
+  const ok=name.trim()&&type&&!nBad&&(type!=='weekdays'||days.length>0);
   return (<>
     <div className="card">
       <label className="f">家事の名前</label>
       <input type="text" value={name} onChange={e=>setName(e.target.value)} placeholder="洗濯を回す"/>
       <label className="f">やる間隔</label>
-      <div className="chips">{[['daily','毎日'],['everyN','⚪︎日に一回'],['weekly','週一'],['monthly','月一'],['weekdays','特定の曜日']].map(([k,l])=>(
+      <div className="chips">{[['daily','毎日'],['workday','仕事の日のみ'],['everyN','⚪︎日に一回'],
+        ['weekly','週一'],['monthly','月一'],['weekdays','特定の曜日']].map(([k,l])=>(
         <button key={k} className={'chip'+(type===k?' on':'')} onClick={()=>setType(k)}>{l}</button>))}</div>
+      {type==='workday'&&<p className="hint">段取りで「仕事」にした日だけ出てきます。</p>}
       {type==='everyN'&&<><label className="f">何日に一回</label>
-        <input type="number" min="2" value={n} onChange={e=>setN(+e.target.value)}/></>}
+        <input type="text" inputMode="numeric" value={n} placeholder="3"
+          onChange={e=>setN(e.target.value.replace(/[^0-9]/g,''))}/>
+        {n===''&&<p className="hint" style={{color:'var(--urgent)'}}>入力が必要です</p>}
+        {n!==''&&!(nNum>=2)&&<p className="hint" style={{color:'var(--urgent)'}}>2以上の数を入れてください</p>}</>}
       {type==='weekdays'&&<><label className="f">曜日</label>
         <div className="chips">{[1,2,3,4,5,6,0].map(i=>(<button key={i} className={'chip'+(days.includes(i)?' on':'')}
           onClick={()=>setDays(days.includes(i)?days.filter(x=>x!==i):[...days,i])}>{WD[i]}</button>))}</div></>}
       {(type==='weekly'||type==='monthly')&&<p className="hint">
         {type==='weekly'?'週は月曜はじまりです。日曜までにやれば達成。':'その月のうちにやれば達成。月末が最終日になります。'}</p>}
       <button className="btn" disabled={!ok} onClick={()=>{
-        setChores([...chores,{id:uid(),name:name.trim(),interval:{type,n,days},lastDone:null,createdAt:today()}]);
-        setName('');setType(null);setDays([]);}}>家事を登録する</button>
+        setChores([...chores,{id:uid(),name:name.trim(),
+          interval:{type,n:nNum||null,days},lastDone:null,createdAt:today()}]);
+        setName('');setType(null);setN('');setDays([]);}}>家事を登録する</button>
     </div>
     <List items={chores} onDel={id=>setChores(chores.filter(c=>c.id!==id))}
       render={c=>[c.name,choreNote(c)+(c.lastDone?` ／ 最後にやった日 ${nice(c.lastDone)}`:' ／ まだ')]}/>
